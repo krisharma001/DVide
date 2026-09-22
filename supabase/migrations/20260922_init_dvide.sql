@@ -90,11 +90,11 @@ create table if not exists public.settlements (
 -- ==============================================================================
 -- Indexes for High Performance Querying
 -- ==============================================================================
-create index if exist_idx_room_members_room on public.room_members(room_id);
-create index if exist_idx_room_members_user on public.room_members(user_id);
-create index if exist_idx_expenses_room on public.expenses(room_id);
-create index if exist_idx_expense_splits_expense on public.expense_splits(expense_id);
-create index if exist_idx_chat_messages_room on public.chat_messages(room_id, created_at desc);
+create index if not exists idx_room_members_room on public.room_members(room_id);
+create index if not exists idx_room_members_user on public.room_members(user_id);
+create index if not exists idx_expenses_room on public.expenses(room_id);
+create index if not exists idx_expense_splits_expense on public.expense_splits(expense_id);
+create index if not exists idx_chat_messages_room on public.chat_messages(room_id, created_at desc);
 
 -- ==============================================================================
 -- Membership Security Helper Function

@@ -1,11 +1,19 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const envUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const envKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+function normalizeSupabaseUrl(url: string): string {
+  if (!url) return '';
+  return url
+    .trim()
+    .replace(/\/rest\/v1\/?$/, '')
+    .replace(/\/$/, '');
+}
+
+const envUrl = normalizeSupabaseUrl(import.meta.env.VITE_SUPABASE_URL || '');
+const envKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
 
 // Allow runtime override via localStorage for demo/testing convenience
-const customUrl = typeof window !== 'undefined' ? localStorage.getItem('dvide_supabase_url') : null;
-const customKey = typeof window !== 'undefined' ? localStorage.getItem('dvide_supabase_key') : null;
+const customUrl = typeof window !== 'undefined' ? normalizeSupabaseUrl(localStorage.getItem('dvide_supabase_url') || '') : '';
+const customKey = typeof window !== 'undefined' ? (localStorage.getItem('dvide_supabase_key') || '').trim() : '';
 
 export const supabaseUrl = customUrl || envUrl;
 export const supabaseKey = customKey || envKey;
@@ -29,7 +37,8 @@ export const supabase: SupabaseClient | null = isSupabaseConfigured
 
 export function saveSupabaseConfig(url: string, key: string) {
   if (typeof window !== 'undefined') {
-    localStorage.setItem('dvide_supabase_url', url.trim());
+    const cleaned = normalizeSupabaseUrl(url);
+    localStorage.setItem('dvide_supabase_url', cleaned);
     localStorage.setItem('dvide_supabase_key', key.trim());
     window.location.reload();
   }

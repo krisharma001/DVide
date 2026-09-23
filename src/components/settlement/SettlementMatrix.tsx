@@ -15,6 +15,8 @@ interface SettlementMatrixProps {
   onRecordSettlement: (transfer: { from_user_id: string; to_user_id: string; amount: number }) => void;
 }
 
+import { cleanMemberName } from '../../lib/store';
+
 export const SettlementMatrix: React.FC<SettlementMatrixProps> = ({
   transfers,
   settlements,
@@ -45,41 +47,45 @@ export const SettlementMatrix: React.FC<SettlementMatrixProps> = ({
   };
 
   return (
-    <div className="space-y-6 pb-24">
-      {/* Hero Header */}
+    <div className="space-y-6 pb-28">
+      {/* Header Summary */}
       <div className="text-center pt-2">
         <h2 className="text-2xl font-bold tracking-tight text-white">Settle Up</h2>
-        <p className="text-xs text-[#8E8E93] mt-1 max-w-sm mx-auto">
+        <p className="text-xs text-[#8E8E93] mt-1 max-w-xs mx-auto">
           Optimized with minimal transactions so everyone gets squared away simply.
         </p>
       </div>
 
-      {/* Simplified Debts List */}
-      <div>
-        <div className="flex items-center justify-between mb-3 px-1">
-          <span className="text-xs font-semibold text-[#8E8E93] uppercase tracking-wider">
+      {/* Suggested Payment Route Capsules */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between px-1">
+          <span className="text-xs font-semibold uppercase tracking-wider text-[#8E8E93]">
             Recommended Transfers ({transfers.length})
           </span>
-          <Badge variant="glass" size="sm" icon={<Sparkles size={11} />}>
+          <Badge variant="glass" size="sm" icon={<Sparkles size={11} className="text-ios-blue" />}>
             Auto-Simplified
           </Badge>
         </div>
 
         {transfers.length === 0 ? (
-          <GlassCard variant="surface" className="p-8 text-center border-dashed border-white/10">
-            <div className="w-12 h-12 rounded-full bg-[#30D158]/15 border border-[#30D158]/30 flex items-center justify-center mx-auto mb-3">
-              <CheckCircle2 size={24} className="text-[#30D158]" />
+          <GlassCard variant="sunken" className="p-8 text-center space-y-3">
+            <div className="w-12 h-12 rounded-full bg-[#30D158]/15 border border-[#30D158]/20 flex items-center justify-center mx-auto text-[#30D158]">
+              <CheckCircle2 size={24} />
             </div>
-            <h3 className="text-base font-semibold text-white">All Settled Up!</h3>
-            <p className="text-xs text-[#8E8E93] mt-1">
-              No one owes anyone money in this room right now.
-            </p>
+            <div>
+              <h3 className="text-base font-semibold text-white">All Settled Up!</h3>
+              <p className="text-xs text-[#8E8E93] mt-0.5">
+                No one owes anyone money in this room right now.
+              </p>
+            </div>
           </GlassCard>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             {transfers.map((t, idx) => {
               const isDebtorMe = t.from_user_id === currentUserId;
               const isCreditorMe = t.to_user_id === currentUserId;
+              const fromClean = cleanMemberName(t.from_name);
+              const toClean = cleanMemberName(t.to_name);
 
               return (
                 <GlassCard
@@ -92,7 +98,7 @@ export const SettlementMatrix: React.FC<SettlementMatrixProps> = ({
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div className="flex flex-col">
                         <span className="text-xs font-semibold text-white truncate">
-                          {t.from_name} {isDebtorMe && '(You)'}
+                          {fromClean} {isDebtorMe && <span className="text-[#8E8E93] font-normal">(You)</span>}
                         </span>
                         <span className="text-[10px] text-[#8E8E93]">Payer</span>
                       </div>
@@ -103,7 +109,7 @@ export const SettlementMatrix: React.FC<SettlementMatrixProps> = ({
 
                       <div className="flex flex-col">
                         <span className="text-xs font-semibold text-white truncate">
-                          {t.to_name} {isCreditorMe && '(You)'}
+                          {toClean} {isCreditorMe && <span className="text-[#8E8E93] font-normal">(You)</span>}
                         </span>
                         <span className="text-[10px] text-[#8E8E93]">Recipient</span>
                       </div>
@@ -115,25 +121,31 @@ export const SettlementMatrix: React.FC<SettlementMatrixProps> = ({
                         {formatCurrency(t.amount, currency)}
                       </span>
 
-                      {currency === '₹' && (
+                      {/* 1-Tap UPI Payment Deep Link (for India ₹ currency) */}
+                      {currency === '₹' && isDebtorMe && (
                         <a
-                          href={`upi://pay?pn=${encodeURIComponent(t.to_name)}&am=${t.amount}&cu=INR&tn=${encodeURIComponent('DVide Settlement')}`}
-                          className="px-2.5 py-1.5 rounded-xl font-semibold text-xs text-white bg-white/[0.08] hover:bg-white/[0.14] border border-white/[0.1] transition-colors ios-touch flex items-center gap-1 shadow-sm"
-                          title="Open UPI App (GPay/PhonePe/Paytm)"
+                          href={`upi://pay?pn=${encodeURIComponent(
+                            toClean
+                          )}&am=${t.amount.toFixed(2)}&cu=INR&tn=${encodeURIComponent(
+                            'DVide Settlement'
+                          )}`}
+                          className="px-2.5 py-1.5 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] text-xs font-semibold text-white border border-white/[0.12] transition-colors ios-touch flex items-center gap-1"
                         >
-                          <Send size={12} className="text-[#30D158]" />
                           <span>UPI</span>
                         </a>
                       )}
 
-                      <button
-                        type="button"
-                        onClick={() => handleConfirmSettle(t)}
-                        className="px-3 py-1.5 rounded-xl font-semibold text-xs text-white bg-ios-blue hover:bg-[#0071EB] transition-colors ios-touch flex items-center gap-1 shadow-sm"
-                      >
-                        <ShieldCheck size={13} />
-                        <span>Settle</span>
-                      </button>
+                      {/* Settle Action Button */}
+                      {(isDebtorMe || isCreditorMe) && (
+                        <button
+                          type="button"
+                          onClick={() => setSettlingTransfer(t)}
+                          className="px-3 py-1.5 rounded-xl bg-ios-blue hover:bg-[#0071EB] text-xs font-semibold text-white transition-colors ios-touch flex items-center gap-1 shadow-sm"
+                        >
+                          <Send size={12} />
+                          <span>Settle</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                 </GlassCard>
@@ -143,9 +155,9 @@ export const SettlementMatrix: React.FC<SettlementMatrixProps> = ({
         )}
       </div>
 
-      {/* Member Balances Breakdown Table */}
-      <div>
-        <span className="text-xs font-semibold text-[#8E8E93] uppercase tracking-wider block mb-3 px-1">
+      {/* Net Position Breakdown by Member */}
+      <div className="space-y-3 pt-2">
+        <span className="text-xs font-semibold uppercase tracking-wider text-[#8E8E93] px-1">
           Net Position by Member
         </span>
         <div className="space-y-2">
@@ -153,6 +165,7 @@ export const SettlementMatrix: React.FC<SettlementMatrixProps> = ({
             const isMe = m.user_id === currentUserId;
             const isPos = m.net_balance > 0.009;
             const isNeg = m.net_balance < -0.009;
+            const cleanName = cleanMemberName(m.display_name);
 
             return (
               <GlassCard
@@ -165,14 +178,14 @@ export const SettlementMatrix: React.FC<SettlementMatrixProps> = ({
                     {m.avatar_url ? (
                       <img src={m.avatar_url} alt="" className="w-full h-full object-cover" />
                     ) : (
-                      <span className="text-xs text-white flex items-center justify-center h-full">
-                        {m.display_name[0]}
+                      <span className="text-xs text-white font-bold flex items-center justify-center h-full">
+                        {cleanName[0]?.toUpperCase()}
                       </span>
                     )}
                   </div>
                   <div>
                     <span className="text-xs font-semibold text-white block">
-                      {m.display_name} {isMe && '(You)'}
+                      {cleanName} {isMe && <span className="text-[#8E8E93] font-normal">(You)</span>}
                     </span>
                     <span className="text-[11px] text-[#8E8E93] block">
                       Paid: {formatCurrency(m.amount_paid, currency)} • Share:{' '}

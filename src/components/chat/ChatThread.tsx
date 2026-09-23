@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Sparkles } from 'lucide-react';
 import { ChatMessage, RoomMember, UserProfile } from '../../types';
+import { cleanMemberName } from '../../lib/store';
 
 interface ChatThreadProps {
   chats: ChatMessage[];
@@ -61,6 +62,18 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
           }
 
           const member = members.find((m) => m.user_id === msg.user_id);
+          const rawCandidate =
+            (member?.display_name && member.display_name.trim().toLowerCase() !== 'me')
+              ? member.display_name
+              : (msg.display_name && msg.display_name.trim().toLowerCase() !== 'me')
+              ? msg.display_name
+              : (isMe ? 'You' : 'Member');
+          
+          let cleanSenderName = cleanMemberName(rawCandidate);
+          if (!isMe && (cleanSenderName.toLowerCase() === 'me' || cleanSenderName.toLowerCase() === 'you')) {
+            cleanSenderName = 'Member';
+          }
+
           const time = new Intl.DateTimeFormat('en-US', {
             hour: 'numeric',
             minute: 'numeric',
@@ -73,16 +86,16 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
               className={`flex items-end gap-2 ${isMe ? 'justify-end' : 'justify-start'}`}
             >
               {!isMe && (
-                <div className="w-7 h-7 rounded-full overflow-hidden bg-white/10 shrink-0 mb-0.5">
+                <div className="w-7 h-7 rounded-full overflow-hidden bg-white/10 shrink-0 mb-0.5 border border-white/10">
                   {msg.avatar_url || member?.avatar_url ? (
                     <img
                       src={msg.avatar_url || member?.avatar_url}
-                      alt={msg.display_name}
+                      alt={cleanSenderName}
                       className="w-full h-full object-cover"
                     />
                   ) : (
-                    <span className="text-xs text-white flex items-center justify-center h-full">
-                      {msg.display_name[0]}
+                    <span className="text-xs text-white font-semibold flex items-center justify-center h-full">
+                      {(cleanSenderName[0] || 'M').toUpperCase()}
                     </span>
                   )}
                 </div>
@@ -95,7 +108,7 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
               >
                 {!isMe && (
                   <span className="text-[10px] text-[#8E8E93] ml-2 mb-0.5 font-medium">
-                    {msg.display_name}
+                    {cleanSenderName}
                   </span>
                 )}
 

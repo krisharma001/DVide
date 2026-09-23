@@ -15,6 +15,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { Expense, RoomMember } from '../../types';
+import { cleanMemberName } from '../../lib/store';
 
 interface ExpenseCardProps {
   expense: Expense;
@@ -189,13 +190,14 @@ export const ExpenseCard: React.FC<ExpenseCardProps> = ({
                 {expense.splits.map((s) => {
                   const m = members.find((mem) => mem.user_id === s.user_id);
                   const isMe = s.user_id === currentUserId;
+                  const cleanName = cleanMemberName(m?.display_name);
                   return (
                     <div
                       key={s.id}
                       className="flex items-center justify-between py-1 px-2.5 rounded-lg bg-white/[0.03]"
                     >
                       <span className={isMe ? 'text-white font-medium' : 'text-[#D1D1D6]'}>
-                        {m?.display_name || 'Member'} {isMe && '(You)'}
+                        {cleanName} {isMe && <span className="text-[#8E8E93] font-normal">(You)</span>}
                       </span>
                       <span className="tnum font-semibold text-white">
                         {formatCurrency(s.total_share, currency)}

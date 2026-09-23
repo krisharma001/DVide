@@ -30,16 +30,27 @@ export function isMatchingRoom(targetRoomId: string | undefined, room: Room | nu
   return false;
 }
 
+export function cleanMemberName(name: string | undefined | null): string {
+  if (!name) return 'Member';
+  const clean = name.replace(/\s*\((You|Admin)\)/gi, '').trim();
+  return clean || 'Member';
+}
+
 function getInitialUser(): UserProfile {
   const saved = localStorage.getItem('dvide_current_user');
   if (saved) {
     try {
-      return JSON.parse(saved);
+      const parsed = JSON.parse(saved);
+      const clean = cleanMemberName(parsed.name);
+      if (clean && clean.toLowerCase() !== 'me') {
+        return { ...parsed, name: clean };
+      }
     } catch {}
   }
+  const randomSuffix = Math.floor(100 + Math.random() * 900);
   return {
     id: 'u_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36).slice(-4),
-    name: 'Me',
+    name: `User ${randomSuffix}`,
     email: '',
     avatar_url: '',
   };
@@ -67,7 +78,16 @@ export function useDVideStore() {
 
   const [members, setMembers] = useState<RoomMember[]>(() => {
     const saved = localStorage.getItem('dvide_members');
-    return saved ? JSON.parse(saved) : [];
+    if (!saved) return [];
+    try {
+      const parsed: RoomMember[] = JSON.parse(saved);
+      return parsed.map((m) => ({
+        ...m,
+        display_name: cleanMemberName(m.display_name),
+      }));
+    } catch {
+      return [];
+    }
   });
 
   const [expenses, setExpenses] = useState<Expense[]>(() => {
@@ -110,7 +130,14 @@ export function useDVideStore() {
   }, [currentRoom?.invite_code, currentRoom?.id]);
 
   // Active room data filters (fuzzy matching room_id so legacy IDs never drop data)
-  const roomMembers = currentRoom ? members.filter((m) => isMatchingRoom(m.room_id, currentRoom)) : [];
+  const roomMembers = currentRoom
+    ? members
+        .filter((m) => isMatchingRoom(m.room_id, currentRoom))
+        .map((m) => ({
+          ...m,
+          display_name: cleanMemberName(m.display_name),
+        }))
+    : [];
   const roomExpenses = currentRoom ? expenses.filter((e) => isMatchingRoom(e.room_id, currentRoom)) : [];
   const roomChats = currentRoom ? chats.filter((c) => isMatchingRoom(c.room_id, currentRoom)) : [];
 
@@ -464,6 +491,24 @@ export function useDVideStore() {
           });
         }
 
+        const { data: dbMembers } = await client
+          .from('room_members')
+          .select('*')
+          .eq('room_id', currentRoom.id);
+
+        if (dbMembers && dbMembers.length > 0) {
+          setMembers((prev) => {
+            const existingIds = new Set(prev.map((m) => m.id));
+            const fresh = dbMembers
+              .filter((m: any) => !existingIds.has(m.id))
+              .map((m: any) => ({
+                ...m,
+                display_name: cleanMemberName(m.display_name),
+              }));
+            return [...prev, ...fresh];
+          });
+        }
+
         const { data: dbChats } = await client
           .from('chat_messages')
           .select('*')
@@ -473,20 +518,18 @@ export function useDVideStore() {
         if (dbChats && dbChats.length > 0) {
           setChats((prev) => {
             const existingIds = new Set(prev.map((c) => c.id));
-            const fresh = dbChats.filter((c) => !existingIds.has(c.id));
-            return [...prev, ...fresh];
-          });
-        }
-
-        const { data: dbMembers } = await client
-          .from('room_members')
-          .select('*')
-          .eq('room_id', currentRoom.id);
-
-        if (dbMembers && dbMembers.length > 0) {
-          setMembers((prev) => {
-            const existingIds = new Set(prev.map((m) => m.id));
-            const fresh = dbMembers.filter((m) => !existingIds.has(m.id));
+            const fresh = dbChats
+              .filter((c: any) => !existingIds.has(c.id))
+              .map((c: any) => {
+                const member =
+                  dbMembers?.find((m: any) => m.user_id === c.user_id) ||
+                  members.find((m) => m.user_id === c.user_id);
+                return {
+                  ...c,
+                  display_name: cleanMemberName(member?.display_name || c.display_name),
+                  avatar_url: member?.avatar_url || c.avatar_url,
+                };
+              });
             return [...prev, ...fresh];
           });
         }
@@ -627,11 +670,12 @@ export function useDVideStore() {
 
   const sendChatMessage = (message: string) => {
     if (!currentRoom || !message.trim()) return;
+    const cleanName = cleanMemberName(currentUser.name);
     const chat: ChatMessage = {
       id: `msg_${Date.now()}`,
       room_id: currentRoom.id,
       user_id: currentUser.id,
-      display_name: currentUser.name,
+      display_name: cleanName,
       avatar_url: currentUser.avatar_url,
       message: message.trim(),
       created_at: new Date().toISOString(),
@@ -763,7 +807,7 @@ export function useDVideStore() {
       id: `m_${currentUser.id}_${Date.now()}`,
       room_id: newRoom.id,
       user_id: currentUser.id,
-      display_name: currentUser.name || 'Admin',
+      display_name: cleanMemberName(currentUser.name),
       avatar_url: currentUser.avatar_url,
       joined_at: new Date().toISOString(),
       is_online: true,
@@ -779,6 +823,13 @@ export function useDVideStore() {
             name: newRoom.name,
             invite_code: newRoom.invite_code,
             currency: newRoom.currency,
+          });
+          await client.from('room_members').upsert({
+            id: selfMember.id,
+            room_id: newRoom.id,
+            user_id: currentUser.id,
+            display_name: selfMember.display_name,
+            avatar_url: selfMember.avatar_url,
           });
         } catch {}
       })();
@@ -863,11 +914,12 @@ export function useDVideStore() {
     setCurrentRoom(targetRoom);
 
     // Add current user as member
+    const cleanSelfName = cleanMemberName(myName);
     const newMember: RoomMember = {
       id: `m_${currentUser.id}_${Date.now()}`,
       room_id: targetRoom.id,
       user_id: currentUser.id,
-      display_name: myName,
+      display_name: cleanSelfName,
       avatar_url: currentUser.avatar_url,
       joined_at: new Date().toISOString(),
       is_online: true,
@@ -877,12 +929,35 @@ export function useDVideStore() {
       if (prev.some((m) => isMatchingRoom(m.room_id, targetRoom) && m.user_id === currentUser.id)) {
         return prev.map((m) =>
           m.user_id === currentUser.id && isMatchingRoom(m.room_id, targetRoom)
-            ? { ...m, display_name: myName, is_online: true }
+            ? { ...m, display_name: cleanSelfName, is_online: true }
             : m
         );
       }
       return [...prev, newMember];
     });
+
+    // 🚀 REALTIME BROADCAST new member to other participants
+    if (channelRef.current) {
+      channelRef.current.send({
+        type: 'broadcast',
+        event: 'new_member',
+        payload: newMember,
+      });
+    }
+
+    if (client) {
+      (async () => {
+        try {
+          await client.from('room_members').upsert({
+            id: newMember.id,
+            room_id: targetRoom!.id,
+            user_id: currentUser.id,
+            display_name: newMember.display_name,
+            avatar_url: newMember.avatar_url,
+          });
+        } catch {}
+      })();
+    }
 
     return true;
   };

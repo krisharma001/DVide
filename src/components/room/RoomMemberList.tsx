@@ -4,6 +4,7 @@ import { Badge } from '../ui/Badge';
 import { formatCurrency } from '../../lib/calculations';
 import { UserPlus, UserCheck, Shield, Sparkles } from 'lucide-react';
 import { RoomMember, MemberBalance, UserProfile } from '../../types';
+import { cleanMemberName } from '../../lib/store';
 
 interface RoomMemberListProps {
   members: RoomMember[];
@@ -96,6 +97,7 @@ export const RoomMemberList: React.FC<RoomMemberListProps> = ({
           const isMe = member.user_id === currentUser.id;
           const isPos = balance.net_balance > 0.009;
           const isNeg = balance.net_balance < -0.009;
+          const cleanName = cleanMemberName(member.display_name);
 
           return (
             <GlassCard
@@ -111,12 +113,12 @@ export const RoomMemberList: React.FC<RoomMemberListProps> = ({
                       {member.avatar_url ? (
                         <img
                           src={member.avatar_url}
-                          alt={member.display_name}
+                          alt={cleanName}
                           className="w-full h-full object-cover"
                         />
                       ) : (
                         <span className="text-sm font-semibold text-white flex items-center justify-center h-full">
-                          {member.display_name[0]}
+                          {(cleanName[0] || 'M').toUpperCase()}
                         </span>
                       )}
                     </div>
@@ -128,7 +130,7 @@ export const RoomMemberList: React.FC<RoomMemberListProps> = ({
                   <div>
                     <div className="flex items-center gap-1.5">
                       <span className="text-sm font-semibold text-white">
-                        {member.display_name}
+                        {cleanName}
                       </span>
                       {isMe && (
                         <Badge variant="glass" size="sm">

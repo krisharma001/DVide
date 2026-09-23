@@ -215,7 +215,23 @@ export const RoomMemberList: React.FC<RoomMemberListProps> = ({
 
       {/* Members Grid */}
       <div className="space-y-3">
-        {members.map((member) => {
+        {[...members]
+          .sort((a, b) => {
+            // 1. Room Admin is always at the top for all users
+            const aIsAdmin = adminUserId && a.user_id === adminUserId;
+            const bIsAdmin = adminUserId && b.user_id === adminUserId;
+            if (aIsAdmin && !bIsAdmin) return -1;
+            if (!aIsAdmin && bIsAdmin) return 1;
+
+            // 2. Active user ("You") comes next if not admin
+            const aIsMe = a.user_id === currentUser.id;
+            const bIsMe = b.user_id === currentUser.id;
+            if (aIsMe && !bIsMe) return -1;
+            if (!aIsMe && bIsMe) return 1;
+
+            return 0;
+          })
+          .map((member) => {
           const balance = balances.find((b) => b.user_id === member.user_id) || {
             amount_paid: 0,
             amount_owed: 0,

@@ -174,12 +174,54 @@ export function useDVideStore() {
     net_balance: 0,
   };
 
-  const roomAdminUserId = currentRoom?.created_by && currentRoom.created_by !== 'host'
-    ? currentRoom.created_by
-    : roomMembers[0]?.user_id;
+  const isGuestInCurrentRoom = Boolean(
+    currentRoom && localStorage.getItem(`dvide_joined_guest_${currentRoom.id}`) === 'true'
+  );
+
+  const roomAdminUserId = (() => {
+    if (!currentRoom) return undefined;
+
+    // 1. Explicit creator ID on the room object (and not dummy host/pending_sync)
+    if (
+      currentRoom.created_by &&
+      currentRoom.created_by !== 'host' &&
+      currentRoom.created_by !== 'pending_sync' &&
+      currentRoom.created_by !== 'unknown'
+    ) {
+      return currentRoom.created_by;
+    }
+
+    // 2. Check if this device explicitly created this room
+    const localCreator = localStorage.getItem(`dvide_room_created_by_${currentRoom.id}`);
+    if (localCreator) {
+      return localCreator;
+    }
+
+    // 3. Fallback for legacy demo rooms: the earliest joined member who is NOT a newly joined guest
+    const validMembers = roomMembers.length > 0 ? roomMembers : members.filter((m) => isMatchingRoom(m.room_id, currentRoom));
+    if (validMembers.length > 0) {
+      const candidates = isGuestInCurrentRoom
+        ? validMembers.filter((m) => m.user_id !== currentUser.id)
+        : validMembers;
+
+      if (candidates.length > 0) {
+        const sorted = [...candidates].sort((a, b) => {
+          const timeA = a.joined_at ? new Date(a.joined_at).getTime() : 0;
+          const timeB = b.joined_at ? new Date(b.joined_at).getTime() : 0;
+          return timeA - timeB;
+        });
+        return sorted[0]?.user_id;
+      }
+    }
+
+    return undefined;
+  })();
 
   const isCurrentUserAdmin = Boolean(
-    currentRoom && roomAdminUserId && currentUser.id === roomAdminUserId
+    currentRoom &&
+      roomAdminUserId &&
+      currentUser.id === roomAdminUserId &&
+      !isGuestInCurrentRoom
   );
 
   const channelRef = useRef<RealtimeChannel | null>(null);
@@ -335,11 +377,22 @@ export function useDVideStore() {
       const state = stateRef.current;
       if (!state.currentRoom) return;
 
+      const hostCreatorId =
+        state.currentRoom.created_by &&
+        state.currentRoom.created_by !== 'host' &&
+        state.currentRoom.created_by !== 'pending_sync'
+          ? state.currentRoom.created_by
+          : localStorage.getItem(`dvide_room_created_by_${state.currentRoom.id}`) ||
+            state.currentUser.id;
+
       channel.send({
         type: 'broadcast',
         event: 'respond_room_sync',
         payload: {
-          room: state.currentRoom,
+          room: {
+            ...state.currentRoom,
+            created_by: hostCreatorId,
+          },
           members: state.roomMembers,
           expenses: state.roomExpenses,
           chats: state.roomChats,
@@ -351,34 +404,52 @@ export function useDVideStore() {
     channel.on('broadcast', { event: 'respond_room_sync' }, ({ payload }) => {
       console.log('[DVide Realtime] Received respond_room_sync:', payload);
       if (payload.room) {
-        // Sync real room metadata
+        const creatorId =
+          payload.room.created_by &&
+          payload.room.created_by !== 'host' &&
+          payload.room.created_by !== 'pending_sync'
+            ? payload.room.created_by
+            : undefined;
+
+        // Sync real room metadata including creator / admin
         setCurrentRoom((prev) => {
           if (!prev) return payload.room;
           return {
             ...prev,
-            name: payload.room.name || prev.name,
-            currency: payload.room.currency || prev.currency,
+            ...payload.room,
+            created_by: creatorId || prev.created_by,
           };
         });
         setRooms((prev) => {
           if (prev.some((r) => isMatchingRoom(r.id, payload.room))) {
             return prev.map((r) =>
               isMatchingRoom(r.id, payload.room)
-                ? { ...r, name: payload.room.name || r.name, currency: payload.room.currency || r.currency }
+                ? {
+                    ...r,
+                    ...payload.room,
+                    created_by: creatorId || r.created_by,
+                  }
                 : r
             );
           }
-          return [payload.room, ...prev];
+          return [{ ...payload.room, created_by: creatorId || payload.room.created_by }, ...prev];
         });
       }
 
       if (payload.members?.length) {
         setMembers((prev) => {
-          const existingUserIds = new Set(prev.map((m) => m.user_id));
-          const fresh = payload.members
-            .filter((m: RoomMember) => !existingUserIds.has(m.user_id))
-            .map((m: RoomMember) => ({ ...m, room_id: currentRoom.id, is_online: true }));
-          return [...prev, ...fresh];
+          const map = new Map<string, RoomMember>();
+          // Put host payload members first to preserve earliest joined_at
+          payload.members.forEach((m: RoomMember) => {
+            map.set(m.user_id, { ...m, room_id: currentRoom.id, is_online: true });
+          });
+          // Preserve local member if exists
+          prev.forEach((m) => {
+            if (!map.has(m.user_id)) {
+              map.set(m.user_id, m);
+            }
+          });
+          return Array.from(map.values());
         });
       }
       if (payload.expenses?.length) {
@@ -426,6 +497,10 @@ export function useDVideStore() {
     channel.on('broadcast', { event: 'room_updated' }, ({ payload }) => {
       console.log('[DVide Realtime] Received room_updated broadcast:', payload);
       if (!payload) return;
+      if (payload.created_by === currentUser.id) {
+        localStorage.removeItem(`dvide_joined_guest_${payload.id}`);
+        localStorage.setItem(`dvide_room_created_by_${payload.id}`, currentUser.id);
+      }
       setCurrentRoom((prev) => (prev ? { ...prev, ...payload } : payload));
       setRooms((prev) =>
         prev.map((r) => (isMatchingRoom(r.id, payload) ? { ...r, ...payload } : r))
@@ -547,6 +622,19 @@ export function useDVideStore() {
     // Database hydration (if Supabase PostgreSQL tables accessible)
     const fetchFromSupabase = async () => {
       try {
+        const { data: dbRoom } = await client
+          .from('rooms')
+          .select('*')
+          .eq('id', currentRoom.id)
+          .maybeSingle();
+
+        if (dbRoom && dbRoom.created_by) {
+          setCurrentRoom((prev) => (prev ? { ...prev, created_by: dbRoom.created_by } : dbRoom));
+          setRooms((prev) =>
+            prev.map((r) => (isMatchingRoom(r.id, dbRoom) ? { ...r, created_by: dbRoom.created_by } : r))
+          );
+        }
+
         const { data: dbExpenses } = await client
           .from('expenses')
           .select('*, splits:expense_splits(*)')
@@ -563,7 +651,8 @@ export function useDVideStore() {
         const { data: dbMembers } = await client
           .from('room_members')
           .select('*')
-          .eq('room_id', currentRoom.id);
+          .eq('room_id', currentRoom.id)
+          .order('joined_at', { ascending: true });
 
         if (dbMembers && dbMembers.length > 0) {
           setMembers((prev) => {
@@ -869,6 +958,9 @@ export function useDVideStore() {
       updated_at: new Date().toISOString(),
     };
 
+    localStorage.setItem(`dvide_room_created_by_${newRoom.id}`, currentUser.id);
+    localStorage.removeItem(`dvide_joined_guest_${newRoom.id}`);
+
     setRooms((prev) => [newRoom, ...prev]);
     setCurrentRoom(newRoom);
 
@@ -890,6 +982,7 @@ export function useDVideStore() {
           await client.from('rooms').insert({
             id: newRoom.id,
             name: newRoom.name,
+            created_by: newRoom.created_by,
             invite_code: newRoom.invite_code,
             currency: newRoom.currency,
           });
@@ -983,13 +1076,17 @@ export function useDVideStore() {
       targetRoom = {
         id: `room_${cleanCode}`,
         name: `Group #${cleanCode}`,
-        created_by: 'host',
+        created_by: 'pending_sync',
         invite_code: cleanCode,
         currency: '₹',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
     }
+
+    // Mark that this user joined this room via code as a guest (never creator)
+    localStorage.setItem(`dvide_joined_guest_${targetRoom.id}`, 'true');
+    localStorage.removeItem(`dvide_room_created_by_${targetRoom.id}`);
 
     setRooms((prev) => {
       if (prev.some((r) => isMatchingRoom(r.id, targetRoom))) return prev;

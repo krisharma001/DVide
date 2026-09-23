@@ -439,6 +439,17 @@ export function useDVideStore() {
       setSettlements((prev) => prev.filter((s) => !isMatchingRoom(s.room_id, currentRoom)));
     });
 
+    // 6e. Listen for room deleted by Admin
+    channel.on('broadcast', { event: 'room_deleted' }, ({ payload }) => {
+      console.log('[DVide Realtime] Received room_deleted broadcast:', payload);
+      if (!payload || !payload.room_id) return;
+      setRooms((prev) => prev.filter((r) => r.id !== payload.room_id && !isMatchingRoom(payload.room_id, r)));
+      if (currentRoom && (currentRoom.id === payload.room_id || isMatchingRoom(payload.room_id, currentRoom))) {
+        setCurrentRoom(null);
+        alert(`The room "${payload.room_name || 'Room'}" was permanently deleted by the Admin.`);
+      }
+    });
+
     // 7. Presence: Track who is currently online and auto-discover peers
     const handlePresenceUpdate = () => {
       const pState = channel.presenceState();
@@ -1262,6 +1273,55 @@ export function useDVideStore() {
     }
   };
 
+  const deleteRoom = async (roomId: string) => {
+    const targetRoom = rooms.find((r) => r.id === roomId || isMatchingRoom(roomId, r));
+    if (!targetRoom) return;
+
+    // Check if current user is admin of target room
+    const isTargetAdmin =
+      (targetRoom.created_by && targetRoom.created_by === currentUser.id) ||
+      (currentRoom && isMatchingRoom(currentRoom.id, targetRoom) && isCurrentUserAdmin);
+
+    if (!isTargetAdmin) {
+      alert('Only the room Admin can delete this room.');
+      return;
+    }
+
+    // Broadcast deletion to all peers in the room before tearing down
+    if (channelRef.current && isMatchingRoom(currentRoom?.id, targetRoom)) {
+      channelRef.current.send({
+        type: 'broadcast',
+        event: 'room_deleted',
+        payload: { room_id: targetRoom.id, room_name: targetRoom.name },
+      });
+    }
+
+    // Remove from local state
+    const remainingRooms = rooms.filter((r) => !isMatchingRoom(r.id, targetRoom));
+    setRooms(remainingRooms);
+    setMembers((prev) => prev.filter((m) => !isMatchingRoom(m.room_id, targetRoom)));
+    setExpenses((prev) => prev.filter((e) => !isMatchingRoom(e.room_id, targetRoom)));
+    setChats((prev) => prev.filter((c) => !isMatchingRoom(c.room_id, targetRoom)));
+    setSettlements((prev) => prev.filter((s) => !isMatchingRoom(s.room_id, targetRoom)));
+
+    if (currentRoom && isMatchingRoom(currentRoom.id, targetRoom)) {
+      setCurrentRoom(remainingRooms[0] || null);
+    }
+
+    // Supabase DB cleanup
+    const client = supabase;
+    if (client) {
+      try {
+        await client.from('rooms').delete().eq('id', targetRoom.id);
+        await client.from('room_members').delete().eq('room_id', targetRoom.id);
+        await client.from('expenses').delete().eq('room_id', targetRoom.id);
+        await client.from('settlements').delete().eq('room_id', targetRoom.id);
+      } catch (err) {
+        console.warn('Failed to delete room from Supabase:', err);
+      }
+    }
+  };
+
   const switchUser = (userId: string) => {
     const member = roomMembers.find((m) => m.user_id === userId);
     if (member) {
@@ -1316,6 +1376,7 @@ export function useDVideStore() {
     updateRoomDetails,
     transferAdmin,
     resetRoomLedger,
+    deleteRoom,
     isSupabaseConnected: isSupabaseConfigured,
   };
 }

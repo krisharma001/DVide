@@ -459,6 +459,7 @@ export function App() {
                   onUpdateRoomDetails={store.updateRoomDetails}
                   onTransferAdmin={store.transferAdmin}
                   onResetRoomLedger={store.resetRoomLedger}
+                  onDeleteRoom={store.deleteRoom}
                 />
               </div>
             )}
@@ -510,10 +511,12 @@ export function App() {
         onClose={() => setIsRoomSwitcherOpen(false)}
         currentRoom={store.currentRoom}
         rooms={store.rooms}
+        currentUser={store.currentUser}
+        isCurrentUserAdmin={store.isCurrentUserAdmin}
         onSelectRoom={store.switchRoom}
         onCreateRoom={store.createRoom}
         onJoinRoom={store.joinRoomByCode}
-        onResetDemo={store.clearAllData}
+        onDeleteRoom={store.deleteRoom}
       />
 
       <SettingsModal

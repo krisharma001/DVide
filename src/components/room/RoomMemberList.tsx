@@ -34,6 +34,7 @@ interface RoomMemberListProps {
   onUpdateRoomDetails?: (name: string, currency: string) => void;
   onTransferAdmin?: (newAdminUserId: string) => void;
   onResetRoomLedger?: () => void;
+  onDeleteRoom?: (roomId: string) => void;
 }
 
 export const RoomMemberList: React.FC<RoomMemberListProps> = ({
@@ -51,6 +52,7 @@ export const RoomMemberList: React.FC<RoomMemberListProps> = ({
   onUpdateRoomDetails,
   onTransferAdmin,
   onResetRoomLedger,
+  onDeleteRoom,
 }) => {
   const [newMemberName, setNewMemberName] = useState('');
   const [isAdding, setIsAdding] = useState(false);
@@ -64,6 +66,7 @@ export const RoomMemberList: React.FC<RoomMemberListProps> = ({
   const [editRoomName, setEditRoomName] = useState(currentRoom.name);
   const [editRoomCurrency, setEditRoomCurrency] = useState(currentRoom.currency);
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
 
   const isSelfInMembers = members.some((m) => m.user_id === currentUser.id);
 
@@ -559,25 +562,42 @@ export const RoomMemberList: React.FC<RoomMemberListProps> = ({
               </div>
             </form>
 
-            {/* Danger Zone: Reset Ledger */}
-            <div className="pt-3 border-t border-white/[0.08] space-y-2">
+            {/* Danger Zone: Reset Ledger & Delete Room */}
+            <div className="pt-3 border-t border-white/[0.08] space-y-2.5">
               <span className="text-[11px] font-semibold text-rose-400 uppercase tracking-wider block">
                 Danger Zone
               </span>
               <p className="text-xs text-[#8E8E93]">
-                Clear all logged expenses and settlement records to restart this room fresh.
+                Irreversible administrative actions for this room.
               </p>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsAdminSettingsOpen(false);
-                  setIsResetConfirmOpen(true);
-                }}
-                className="w-full py-2 px-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ios-touch"
-              >
-                <RotateCcw size={13} />
-                <span>Reset Room Ledger</span>
-              </button>
+
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAdminSettingsOpen(false);
+                    setIsResetConfirmOpen(true);
+                  }}
+                  className="w-full py-2 px-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/20 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ios-touch"
+                >
+                  <RotateCcw size={13} />
+                  <span>Reset Room Ledger</span>
+                </button>
+
+                {onDeleteRoom && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAdminSettingsOpen(false);
+                      setIsDeleteConfirmOpen(true);
+                    }}
+                    className="w-full py-2 px-3 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ios-touch"
+                  >
+                    <Trash2 size={13} />
+                    <span>Delete Room Permanently</span>
+                  </button>
+                )}
+              </div>
             </div>
           </GlassCard>
         </div>
@@ -616,6 +636,55 @@ export const RoomMemberList: React.FC<RoomMemberListProps> = ({
                 className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-xs font-semibold text-white shadow-lg shadow-rose-600/30 transition-all ios-touch"
               >
                 Reset Ledger
+              </button>
+            </div>
+          </GlassCard>
+        </div>
+      )}
+
+      {/* MODAL 5: CONFIRM DELETE ROOM (ADMIN DISCLAIMER) */}
+      {isDeleteConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in">
+          <GlassCard variant="elevated" className="max-w-sm w-full p-5 border-rose-500/35 space-y-4">
+            <div className="flex items-center gap-3 text-rose-400">
+              <div className="w-10 h-10 rounded-full bg-rose-500/15 border border-rose-500/30 flex items-center justify-center shrink-0">
+                <AlertTriangle size={20} />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">Delete Room?</h3>
+                <p className="text-xs text-[#8E8E93]">Admin Disclaimer</p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-xs text-[#E5E5EA] leading-relaxed">
+                Are you sure you want to permanently delete{' '}
+                <strong className="text-white">"{currentRoom.name}"</strong>?
+              </p>
+              <div className="p-3 rounded-xl bg-rose-500/[0.08] border border-rose-500/20 text-[11px] text-rose-300 leading-relaxed">
+                ⚠️ <strong>Reminder:</strong> This action is permanent and cannot be undone. All expenses, settlements, chats, and member records in this room will be deleted for everyone.
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setIsDeleteConfirmOpen(false)}
+                className="flex-1 py-2.5 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] text-xs font-semibold text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onDeleteRoom) {
+                    onDeleteRoom(currentRoom.id);
+                  }
+                  setIsDeleteConfirmOpen(false);
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-xs font-semibold text-white shadow-lg shadow-rose-600/30 transition-all ios-touch"
+              >
+                Delete Room
               </button>
             </div>
           </GlassCard>

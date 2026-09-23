@@ -90,6 +90,7 @@ export function App() {
         onOpenRoomSwitcher={() => setIsRoomSwitcherOpen(true)}
         onOpenInvite={() => setIsInviteOpen(true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenPeople={() => setActiveTab('people')}
       />
 
       {/* Main Container */}

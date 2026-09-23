@@ -103,21 +103,31 @@
 
   .glass-slider-pill {
     position: absolute;
-    top: 5px;
-    bottom: 5px;
+    top: 0;
+    left: 0;
     border-radius: 9999px;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.05) 100%);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.06) 100%);
     backdrop-filter: blur(28px) saturate(220%);
     -webkit-backdrop-filter: blur(28px) saturate(220%);
-    border: 1px solid rgba(255, 255, 255, 0.26);
+    border: 1px solid rgba(255, 255, 255, 0.32);
     box-shadow: 
-      inset 0 1px 1.2px 0 rgba(255, 255, 255, 0.5),
+      inset 0 1px 1.5px 0 rgba(255, 255, 255, 0.65),
       inset 0 -1px 1px 0 rgba(0, 0, 0, 0.35),
-      0 2px 14px rgba(10, 132, 255, 0.35),
-      0 0 24px rgba(0, 122, 255, 0.22);
-    transition: transform 360ms cubic-bezier(0.16, 1, 0.3, 1), width 360ms cubic-bezier(0.16, 1, 0.3, 1), opacity 200ms ease;
+      0 4px 18px rgba(10, 132, 255, 0.38),
+      0 0 28px rgba(0, 122, 255, 0.22);
+    transition: transform 380ms cubic-bezier(0.16, 1, 0.3, 1), width 380ms cubic-bezier(0.16, 1, 0.3, 1), height 380ms cubic-bezier(0.16, 1, 0.3, 1), opacity 200ms ease;
     pointer-events: none;
     z-index: 1;
+    will-change: transform, width, height;
+  }
+
+  .glass-slider-pill.is-dragging {
+    transition: opacity 150ms ease !important;
+    box-shadow: 
+      inset 0 1px 1.5px 0 rgba(255, 255, 255, 0.8),
+      inset 0 -1px 1px 0 rgba(0, 0, 0, 0.4),
+      0 6px 24px rgba(10, 132, 255, 0.55),
+      0 0 36px rgba(0, 122, 255, 0.35);
   }
 
   .glass-dock-btn {

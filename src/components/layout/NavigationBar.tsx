@@ -9,6 +9,7 @@ interface NavigationBarProps {
   onOpenRoomSwitcher: () => void;
   onOpenInvite: () => void;
   onOpenSettings: () => void;
+  onOpenPeople?: () => void;
 }
 
 export const NavigationBar: React.FC<NavigationBarProps> = ({
@@ -18,6 +19,7 @@ export const NavigationBar: React.FC<NavigationBarProps> = ({
   onOpenRoomSwitcher,
   onOpenInvite,
   onOpenSettings,
+  onOpenPeople,
 }) => {
   const onlineCount = Math.max(1, members.filter((m) => m.is_online).length);
 
@@ -52,11 +54,16 @@ export const NavigationBar: React.FC<NavigationBarProps> = ({
         <div className="flex items-center gap-2">
           {currentRoom && (
             <>
-              {/* Online Presence Pill */}
-              <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.05] border border-white/[0.06] text-xs text-[#8E8E93]">
+              {/* Online Presence Pill - tap to view People */}
+              <button
+                type="button"
+                onClick={onOpenPeople}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.08] text-xs text-[#8E8E93] hover:text-white transition-colors cursor-pointer"
+                title="View Room Members & People"
+              >
                 <span className="w-2 h-2 rounded-full bg-[#30D158] animate-pulse" />
-                <span>{onlineCount} in room</span>
-              </div>
+                <span className="font-medium text-white">{onlineCount} in room</span>
+              </button>
 
               {/* Share/Invite Button */}
               <button

@@ -338,3 +338,140 @@ export function calculateRoomSummary(members: RoomMember[], expenses: Expense[])
     member_count: members.length,
   };
 }
+
+export interface MemberSpending {
+  userId: string;
+  displayName: string;
+  spending: number;
+}
+
+export interface TableTaxResult {
+  totalPersonalSpending: number;
+  taxAmount: number;
+  serviceChargeAmount: number;
+  tipAmount: number;
+  grandTotal: number;
+  memberBreakdown: {
+    userId: string;
+    displayName: string;
+    personalSpending: number;
+    allocatedTax: number;
+    allocatedServiceCharge: number;
+    allocatedTip: number;
+    totalShare: number;
+  }[];
+}
+
+/**
+ * Calculates Table Tax & Surcharges distribution over group members' individual personal orders.
+ */
+export function calculateTableTaxDistribution(params: {
+  membersSpending: MemberSpending[];
+  taxRatePercent: number;
+  flatTaxAmount?: number;
+  serviceChargePercent: number;
+  flatServiceCharge?: number;
+  tipAmount: number;
+  splitMethod: 'proportional' | 'equal';
+}): TableTaxResult {
+  const { membersSpending, splitMethod } = params;
+  const count = membersSpending.length;
+
+  if (count === 0) {
+    return {
+      totalPersonalSpending: 0,
+      taxAmount: 0,
+      serviceChargeAmount: 0,
+      tipAmount: 0,
+      grandTotal: 0,
+      memberBreakdown: [],
+    };
+  }
+
+  const totalPersonalMinor = membersSpending.reduce(
+    (sum, m) => sum + toMinorUnits(Math.max(0, m.spending)),
+    0
+  );
+
+  // Determine tax amount (flat amount if provided > 0, else percentage)
+  const taxMinor =
+    params.flatTaxAmount && params.flatTaxAmount > 0
+      ? toMinorUnits(params.flatTaxAmount)
+      : Math.round((totalPersonalMinor * Math.max(0, params.taxRatePercent)) / 100);
+
+  // Determine service charge amount
+  const serviceChargeMinor =
+    params.flatServiceCharge && params.flatServiceCharge > 0
+      ? toMinorUnits(params.flatServiceCharge)
+      : Math.round((totalPersonalMinor * Math.max(0, params.serviceChargePercent)) / 100);
+
+  const tipMinor = toMinorUnits(Math.max(0, params.tipAmount));
+  const grandTotalMinor = totalPersonalMinor + taxMinor + serviceChargeMinor + tipMinor;
+
+  // Distribute tax, service charge, and tip
+  const allocatedTaxList: number[] = [];
+  const allocatedServiceList: number[] = [];
+  const allocatedTipList: number[] = [];
+
+  if (splitMethod === 'equal' || totalPersonalMinor === 0) {
+    allocatedTaxList.push(...distributeMinorUnitsEqually(taxMinor, count));
+    allocatedServiceList.push(...distributeMinorUnitsEqually(serviceChargeMinor, count));
+    allocatedTipList.push(...distributeMinorUnitsEqually(tipMinor, count));
+  } else {
+    // Proportional to personal spending
+    let accTax = 0;
+    let accService = 0;
+    let accTip = 0;
+
+    membersSpending.forEach((m, idx) => {
+      if (idx === count - 1) {
+        allocatedTaxList.push(taxMinor - accTax);
+        allocatedServiceList.push(serviceChargeMinor - accService);
+        allocatedTipList.push(tipMinor - accTip);
+      } else {
+        const mMinor = toMinorUnits(Math.max(0, m.spending));
+        const ratio = mMinor / totalPersonalMinor;
+
+        const tShare = Math.round(taxMinor * ratio);
+        allocatedTaxList.push(tShare);
+        accTax += tShare;
+
+        const sShare = Math.round(serviceChargeMinor * ratio);
+        allocatedServiceList.push(sShare);
+        accService += sShare;
+
+        const tipShare = Math.round(tipMinor * ratio);
+        allocatedTipList.push(tipShare);
+        accTip += tipShare;
+      }
+    });
+  }
+
+  const breakdown = membersSpending.map((m, idx) => {
+    const personalMinor = toMinorUnits(Math.max(0, m.spending));
+    const tMinor = allocatedTaxList[idx] || 0;
+    const sMinor = allocatedServiceList[idx] || 0;
+    const tipM = allocatedTipList[idx] || 0;
+    const totalM = personalMinor + tMinor + sMinor + tipM;
+
+    return {
+      userId: m.userId,
+      displayName: m.displayName,
+      personalSpending: fromMinorUnits(personalMinor),
+      allocatedTax: fromMinorUnits(tMinor),
+      allocatedServiceCharge: fromMinorUnits(sMinor),
+      allocatedTip: fromMinorUnits(tipM),
+      totalShare: fromMinorUnits(totalM),
+    };
+  });
+
+  return {
+    totalPersonalSpending: fromMinorUnits(totalPersonalMinor),
+    taxAmount: fromMinorUnits(taxMinor),
+    serviceChargeAmount: fromMinorUnits(serviceChargeMinor),
+    tipAmount: fromMinorUnits(tipMinor),
+    grandTotal: fromMinorUnits(grandTotalMinor),
+    memberBreakdown: breakdown,
+  };
+}
+

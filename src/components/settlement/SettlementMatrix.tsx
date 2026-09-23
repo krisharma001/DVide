@@ -109,11 +109,22 @@ export const SettlementMatrix: React.FC<SettlementMatrixProps> = ({
                       </div>
                     </div>
 
-                    {/* Amount & Settle Button */}
-                    <div className="flex items-center gap-3 shrink-0">
+                    {/* Amount & Actions */}
+                    <div className="flex items-center gap-2.5 shrink-0">
                       <span className="text-base font-bold text-white tnum">
                         {formatCurrency(t.amount, currency)}
                       </span>
+
+                      {currency === '₹' && (
+                        <a
+                          href={`upi://pay?pn=${encodeURIComponent(t.to_name)}&am=${t.amount}&cu=INR&tn=${encodeURIComponent('DVide Settlement')}`}
+                          className="px-2.5 py-1.5 rounded-xl font-semibold text-xs text-white bg-white/[0.08] hover:bg-white/[0.14] border border-white/[0.1] transition-colors ios-touch flex items-center gap-1 shadow-sm"
+                          title="Open UPI App (GPay/PhonePe/Paytm)"
+                        >
+                          <Send size={12} className="text-[#30D158]" />
+                          <span>UPI</span>
+                        </a>
+                      )}
 
                       <button
                         type="button"

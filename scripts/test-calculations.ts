@@ -93,4 +93,28 @@ console.log("3-way 100 split:", split3.map(s => s.total_share));
 const sum3 = split3.reduce((acc, s) => acc + s.total_share, 0);
 if (Math.round(sum3 * 100) !== 10000) throw new Error(`Sum was ${sum3}, expected 100.00 exactly!`);
 
-console.log("All financial tests PASSED successfully!");
+// 3. Test Table Tax & Surcharge Distribution
+import { calculateTableTaxDistribution } from '../src/lib/calculations.ts';
+
+const tableTest = calculateTableTaxDistribution({
+  membersSpending: [
+    { userId: 'u_a', displayName: 'A', spending: 450 },
+    { userId: 'u_b', displayName: 'B', spending: 650 },
+    { userId: 'u_c', displayName: 'C', spending: 200 }
+  ],
+  taxRatePercent: 18,
+  serviceChargePercent: 0,
+  tipAmount: 0,
+  splitMethod: 'proportional'
+});
+
+console.log("Table Tax Test Result:", tableTest);
+if (tableTest.totalPersonalSpending !== 1300) throw new Error("Personal spending mismatch");
+if (tableTest.taxAmount !== 234) throw new Error("Tax amount mismatch");
+if (tableTest.grandTotal !== 1534) throw new Error("Grand total mismatch");
+if (tableTest.memberBreakdown[0].allocatedTax !== 81) throw new Error("Member A tax mismatch");
+if (tableTest.memberBreakdown[1].allocatedTax !== 117) throw new Error("Member B tax mismatch");
+if (tableTest.memberBreakdown[2].allocatedTax !== 36) throw new Error("Member C tax mismatch");
+
+console.log("All financial & Table Tax tests PASSED successfully!");
+

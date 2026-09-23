@@ -6,7 +6,7 @@ import { Room } from '../../types';
 interface RoomSwitcherModalProps {
   isOpen: boolean;
   onClose: () => void;
-  currentRoom: Room;
+  currentRoom: Room | null;
   rooms: Room[];
   onSelectRoom: (roomId: string) => void;
   onCreateRoom: (name: string, currency: string) => void;
@@ -24,7 +24,9 @@ export const RoomSwitcherModal: React.FC<RoomSwitcherModalProps> = ({
   onJoinRoom,
   onResetDemo,
 }) => {
-  const [activeTab, setActiveTab] = useState<'switch' | 'create' | 'join'>('switch');
+  const [activeTab, setActiveTab] = useState<'switch' | 'create' | 'join'>(() => {
+    return rooms.length === 0 ? 'create' : 'switch';
+  });
   const [newRoomName, setNewRoomName] = useState('');
   const [currency, setCurrency] = useState('₹');
   const [inviteCode, setInviteCode] = useState('');
@@ -88,7 +90,7 @@ export const RoomSwitcherModal: React.FC<RoomSwitcherModalProps> = ({
         {activeTab === 'switch' && (
           <div className="space-y-2.5">
             {rooms.map((r) => {
-              const isSelected = r.id === currentRoom.id;
+              const isSelected = currentRoom !== null && r.id === currentRoom.id;
               return (
                 <div
                   key={r.id}

@@ -174,6 +174,14 @@ export function useDVideStore() {
     net_balance: 0,
   };
 
+  const roomAdminUserId = currentRoom?.created_by && currentRoom.created_by !== 'host'
+    ? currentRoom.created_by
+    : roomMembers[0]?.user_id;
+
+  const isCurrentUserAdmin = Boolean(
+    currentRoom && roomAdminUserId && currentUser.id === roomAdminUserId
+  );
+
   const channelRef = useRef<RealtimeChannel | null>(null);
   const stateRef = useRef({
     currentRoom,
@@ -400,6 +408,35 @@ export function useDVideStore() {
           return [...prev, ...fresh];
         });
       }
+    });
+
+    // 6b. Listen for member removed by Admin
+    channel.on('broadcast', { event: 'member_removed' }, ({ payload }) => {
+      console.log('[DVide Realtime] Received member_removed broadcast:', payload);
+      if (!payload || !payload.user_id) return;
+      if (payload.user_id === currentUser.id) {
+        setCurrentRoom(null);
+        alert('You have been removed from this room by the Admin.');
+      } else {
+        setMembers((prev) => prev.filter((m) => m.user_id !== payload.user_id));
+      }
+    });
+
+    // 6c. Listen for room details or admin transfer updated
+    channel.on('broadcast', { event: 'room_updated' }, ({ payload }) => {
+      console.log('[DVide Realtime] Received room_updated broadcast:', payload);
+      if (!payload) return;
+      setCurrentRoom((prev) => (prev ? { ...prev, ...payload } : payload));
+      setRooms((prev) =>
+        prev.map((r) => (isMatchingRoom(r.id, payload) ? { ...r, ...payload } : r))
+      );
+    });
+
+    // 6d. Listen for ledger reset by Admin
+    channel.on('broadcast', { event: 'ledger_reset' }, ({ payload }) => {
+      console.log('[DVide Realtime] Received ledger_reset broadcast:', payload);
+      setExpenses((prev) => prev.filter((e) => !isMatchingRoom(e.room_id, currentRoom)));
+      setSettlements((prev) => prev.filter((s) => !isMatchingRoom(s.room_id, currentRoom)));
     });
 
     // 7. Presence: Track who is currently online and auto-discover peers
@@ -1035,6 +1072,194 @@ export function useDVideStore() {
         payload: welcomeMsg,
       });
     }
+
+    const client = supabase;
+    if (client) {
+      (async () => {
+        try {
+          await client.from('room_members').upsert({
+            id: newMember.id,
+            room_id: currentRoom.id,
+            user_id: newMember.user_id,
+            display_name: newMember.display_name,
+            avatar_url: newMember.avatar_url,
+          });
+        } catch {}
+      })();
+    }
+  };
+
+  const removeMemberFromRoom = async (userId: string) => {
+    if (!currentRoom || !isCurrentUserAdmin || userId === currentUser.id) return;
+    const targetMember = roomMembers.find((m) => m.user_id === userId);
+    const targetName = cleanMemberName(targetMember?.display_name);
+
+    setMembers((prev) => prev.filter((m) => !(m.user_id === userId && isMatchingRoom(m.room_id, currentRoom))));
+
+    const removeNotice: ChatMessage = {
+      id: `sys_${Date.now()}`,
+      room_id: currentRoom.id,
+      user_id: 'system',
+      display_name: 'DVide Bot',
+      message: `🚫 ${cleanMemberName(currentUser.name)} (Admin) removed ${targetName} from the room.`,
+      created_at: new Date().toISOString(),
+    };
+    setChats((prev) => [...prev, removeNotice]);
+
+    if (channelRef.current) {
+      channelRef.current.send({
+        type: 'broadcast',
+        event: 'member_removed',
+        payload: { user_id: userId, room_id: currentRoom.id },
+      });
+      channelRef.current.send({
+        type: 'broadcast',
+        event: 'new_chat',
+        payload: removeNotice,
+      });
+    }
+
+    const client = supabase;
+    if (client) {
+      try {
+        await client
+          .from('room_members')
+          .delete()
+          .eq('room_id', currentRoom.id)
+          .eq('user_id', userId);
+      } catch {}
+    }
+  };
+
+  const updateRoomDetails = async (name: string, currency: string) => {
+    if (!currentRoom || !isCurrentUserAdmin || !name.trim()) return;
+    const updatedRoom: Room = {
+      ...currentRoom,
+      name: name.trim(),
+      currency: currency || currentRoom.currency,
+      updated_at: new Date().toISOString(),
+    };
+
+    setCurrentRoom(updatedRoom);
+    setRooms((prev) => prev.map((r) => isMatchingRoom(r.id, currentRoom) ? updatedRoom : r));
+
+    const notice: ChatMessage = {
+      id: `sys_${Date.now()}`,
+      room_id: currentRoom.id,
+      user_id: 'system',
+      display_name: 'DVide Bot',
+      message: `⚙️ Room settings updated: "${updatedRoom.name}" (${updatedRoom.currency})`,
+      created_at: new Date().toISOString(),
+    };
+    setChats((prev) => [...prev, notice]);
+
+    if (channelRef.current) {
+      channelRef.current.send({
+        type: 'broadcast',
+        event: 'room_updated',
+        payload: updatedRoom,
+      });
+      channelRef.current.send({
+        type: 'broadcast',
+        event: 'new_chat',
+        payload: notice,
+      });
+    }
+
+    const client = supabase;
+    if (client) {
+      try {
+        await client
+          .from('rooms')
+          .update({ name: updatedRoom.name, currency: updatedRoom.currency })
+          .eq('id', currentRoom.id);
+      } catch {}
+    }
+  };
+
+  const transferAdmin = async (newAdminUserId: string) => {
+    if (!currentRoom || !isCurrentUserAdmin || newAdminUserId === currentUser.id) return;
+    const newAdminMember = roomMembers.find((m) => m.user_id === newAdminUserId);
+    if (!newAdminMember) return;
+
+    const updatedRoom: Room = {
+      ...currentRoom,
+      created_by: newAdminUserId,
+      updated_at: new Date().toISOString(),
+    };
+
+    setCurrentRoom(updatedRoom);
+    setRooms((prev) => prev.map((r) => isMatchingRoom(r.id, currentRoom) ? updatedRoom : r));
+
+    const notice: ChatMessage = {
+      id: `sys_${Date.now()}`,
+      room_id: currentRoom.id,
+      user_id: 'system',
+      display_name: 'DVide Bot',
+      message: `👑 ${cleanMemberName(currentUser.name)} handed over Room Admin rights to ${cleanMemberName(newAdminMember.display_name)}.`,
+      created_at: new Date().toISOString(),
+    };
+    setChats((prev) => [...prev, notice]);
+
+    if (channelRef.current) {
+      channelRef.current.send({
+        type: 'broadcast',
+        event: 'room_updated',
+        payload: updatedRoom,
+      });
+      channelRef.current.send({
+        type: 'broadcast',
+        event: 'new_chat',
+        payload: notice,
+      });
+    }
+
+    const client = supabase;
+    if (client) {
+      try {
+        await client
+          .from('rooms')
+          .update({ created_by: newAdminUserId })
+          .eq('id', currentRoom.id);
+      } catch {}
+    }
+  };
+
+  const resetRoomLedger = async () => {
+    if (!currentRoom || !isCurrentUserAdmin) return;
+    setExpenses((prev) => prev.filter((e) => !isMatchingRoom(e.room_id, currentRoom)));
+    setSettlements((prev) => prev.filter((s) => !isMatchingRoom(s.room_id, currentRoom)));
+
+    const notice: ChatMessage = {
+      id: `sys_${Date.now()}`,
+      room_id: currentRoom.id,
+      user_id: 'system',
+      display_name: 'DVide Bot',
+      message: `🧹 Room ledger was reset by Admin (${cleanMemberName(currentUser.name)}). All expenses settled!`,
+      created_at: new Date().toISOString(),
+    };
+    setChats((prev) => [...prev, notice]);
+
+    if (channelRef.current) {
+      channelRef.current.send({
+        type: 'broadcast',
+        event: 'ledger_reset',
+        payload: { room_id: currentRoom.id },
+      });
+      channelRef.current.send({
+        type: 'broadcast',
+        event: 'new_chat',
+        payload: notice,
+      });
+    }
+
+    const client = supabase;
+    if (client) {
+      try {
+        await client.from('expenses').delete().eq('room_id', currentRoom.id);
+        await client.from('settlements').delete().eq('room_id', currentRoom.id);
+      } catch {}
+    }
   };
 
   const switchUser = (userId: string) => {
@@ -1085,6 +1310,12 @@ export function useDVideStore() {
     },
     switchUser,
     clearAllData,
+    roomAdminUserId,
+    isCurrentUserAdmin,
+    removeMemberFromRoom,
+    updateRoomDetails,
+    transferAdmin,
+    resetRoomLedger,
     isSupabaseConnected: isSupabaseConfigured,
   };
 }

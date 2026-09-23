@@ -422,6 +422,7 @@ export function App() {
                   memberBalances={store.memberBalances}
                   currency={store.currentRoom.currency}
                   currentUserId={store.currentUser.id}
+                  adminUserId={store.roomAdminUserId}
                   onRecordSettlement={store.recordSettlement}
                 />
               </div>
@@ -434,6 +435,7 @@ export function App() {
                   chats={store.chats}
                   members={store.members}
                   currentUser={store.currentUser}
+                  adminUserId={store.roomAdminUserId}
                   onSendMessage={store.sendChatMessage}
                 />
               </div>
@@ -446,10 +448,17 @@ export function App() {
                   members={store.members}
                   balances={store.memberBalances}
                   currentUser={store.currentUser}
+                  currentRoom={store.currentRoom}
                   currency={store.currentRoom.currency}
+                  adminUserId={store.roomAdminUserId}
+                  isCurrentUserAdmin={store.isCurrentUserAdmin}
                   onAddMember={store.addMemberToRoom}
                   onSwitchUser={store.switchUser}
                   onUpdateProfileName={store.updateProfileName}
+                  onRemoveMember={store.removeMemberFromRoom}
+                  onUpdateRoomDetails={store.updateRoomDetails}
+                  onTransferAdmin={store.transferAdmin}
+                  onResetRoomLedger={store.resetRoomLedger}
                 />
               </div>
             )}

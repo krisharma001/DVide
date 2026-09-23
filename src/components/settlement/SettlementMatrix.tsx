@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { GlassCard } from '../ui/GlassCard';
 import { Badge } from '../ui/Badge';
 import { formatCurrency } from '../../lib/calculations';
-import { ArrowRight, CheckCircle2, Sparkles, Send, ShieldCheck, History } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Sparkles, Send, ShieldCheck, History, Crown } from 'lucide-react';
 import { SettlementTransfer, SettlementRecord, MemberBalance } from '../../types';
 import confetti from 'canvas-confetti';
 
@@ -12,6 +12,7 @@ interface SettlementMatrixProps {
   memberBalances: MemberBalance[];
   currency: string;
   currentUserId: string;
+  adminUserId?: string;
   onRecordSettlement: (transfer: { from_user_id: string; to_user_id: string; amount: number }) => void;
 }
 
@@ -23,6 +24,7 @@ export const SettlementMatrix: React.FC<SettlementMatrixProps> = ({
   memberBalances,
   currency,
   currentUserId,
+  adminUserId,
   onRecordSettlement,
 }) => {
   const [settlingTransfer, setSettlingTransfer] = useState<SettlementTransfer | null>(null);
@@ -167,32 +169,43 @@ export const SettlementMatrix: React.FC<SettlementMatrixProps> = ({
             const isNeg = m.net_balance < -0.009;
             const cleanName = cleanMemberName(m.display_name);
 
-            return (
-              <GlassCard
-                key={m.user_id}
-                variant="sunken"
-                className="p-3 px-4 flex items-center justify-between"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full overflow-hidden bg-white/10 shrink-0">
-                    {m.avatar_url ? (
-                      <img src={m.avatar_url} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      <span className="text-xs text-white font-bold flex items-center justify-center h-full">
-                        {cleanName[0]?.toUpperCase()}
-                      </span>
-                    )}
-                  </div>
-                  <div>
-                    <span className="text-xs font-semibold text-white block">
-                      {cleanName} {isMe && <span className="text-[#8E8E93] font-normal">(You)</span>}
-                    </span>
-                    <span className="text-[11px] text-[#8E8E93] block">
-                      Paid: {formatCurrency(m.amount_paid, currency)} • Share:{' '}
-                      {formatCurrency(m.amount_owed, currency)}
-                    </span>
-                  </div>
-                </div>
+                  const isCreatorAdmin = Boolean(adminUserId && m.user_id === adminUserId);
+
+                  return (
+                    <GlassCard
+                      key={m.user_id}
+                      variant="sunken"
+                      className="p-3 px-4 flex items-center justify-between"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`w-8 h-8 rounded-full overflow-hidden bg-white/10 shrink-0 border ${
+                          isCreatorAdmin ? 'border-amber-400/40 ring-1 ring-amber-400/20' : 'border-white/10'
+                        }`}>
+                          {m.avatar_url ? (
+                            <img src={m.avatar_url} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            <span className="text-xs text-white font-bold flex items-center justify-center h-full">
+                              {cleanName[0]?.toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+                        <div>
+                          <span className="text-xs font-semibold text-white flex items-center gap-1.5 flex-wrap">
+                            <span>{cleanName}</span>
+                            {isCreatorAdmin && (
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold text-amber-300 bg-amber-400/15 border border-amber-400/30">
+                                <Crown size={8} className="text-amber-400 fill-amber-400/30" />
+                                Admin
+                              </span>
+                            )}
+                            {isMe && <span className="text-[#8E8E93] font-normal text-[11px]">(You)</span>}
+                          </span>
+                          <span className="text-[11px] text-[#8E8E93] block">
+                            Paid: {formatCurrency(m.amount_paid, currency)} • Share:{' '}
+                            {formatCurrency(m.amount_owed, currency)}
+                          </span>
+                        </div>
+                      </div>
 
                 <div className="text-right">
                   <span

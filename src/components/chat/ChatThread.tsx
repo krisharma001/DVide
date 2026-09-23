@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles } from 'lucide-react';
+import { Send, Sparkles, Crown } from 'lucide-react';
 import { ChatMessage, RoomMember, UserProfile } from '../../types';
 import { cleanMemberName } from '../../lib/store';
 
@@ -7,6 +7,7 @@ interface ChatThreadProps {
   chats: ChatMessage[];
   members: RoomMember[];
   currentUser: UserProfile;
+  adminUserId?: string;
   onSendMessage: (message: string) => void;
 }
 
@@ -14,6 +15,7 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
   chats,
   members,
   currentUser,
+  adminUserId,
   onSendMessage,
 }) => {
   const [inputText, setInputText] = useState('');
@@ -80,13 +82,17 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
             hour12: true,
           }).format(new Date(msg.created_at));
 
+          const isSenderAdmin = Boolean(adminUserId && msg.user_id === adminUserId);
+
           return (
             <div
               key={msg.id}
               className={`flex items-end gap-2 ${isMe ? 'justify-end' : 'justify-start'}`}
             >
               {!isMe && (
-                <div className="w-7 h-7 rounded-full overflow-hidden bg-white/10 shrink-0 mb-0.5 border border-white/10">
+                <div className={`w-7 h-7 rounded-full overflow-hidden bg-white/10 shrink-0 mb-0.5 border ${
+                  isSenderAdmin ? 'border-amber-400/40 ring-1 ring-amber-400/20' : 'border-white/10'
+                }`}>
                   {msg.avatar_url || member?.avatar_url ? (
                     <img
                       src={msg.avatar_url || member?.avatar_url}
@@ -107,9 +113,17 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
                 }`}
               >
                 {!isMe && (
-                  <span className="text-[10px] text-[#8E8E93] ml-2 mb-0.5 font-medium">
-                    {cleanSenderName}
-                  </span>
+                  <div className="flex items-center gap-1.5 ml-2 mb-0.5">
+                    <span className="text-[10px] text-[#8E8E93] font-medium">
+                      {cleanSenderName}
+                    </span>
+                    {isSenderAdmin && (
+                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold text-amber-300 bg-amber-400/15 border border-amber-400/30">
+                        <Crown size={8} className="text-amber-400 fill-amber-400/30" />
+                        Admin
+                      </span>
+                    )}
+                  </div>
                 )}
 
                 <div

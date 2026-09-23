@@ -448,6 +448,7 @@ export function App() {
                   currency={store.currentRoom.currency}
                   onAddMember={store.addMemberToRoom}
                   onSwitchUser={store.switchUser}
+                  onUpdateProfileName={store.updateProfileName}
                 />
               </div>
             )}

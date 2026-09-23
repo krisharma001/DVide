@@ -36,21 +36,36 @@ export function cleanMemberName(name: string | undefined | null): string {
   return clean || 'Member';
 }
 
+export const RANDOM_NAMES = [
+  'Alex', 'Rohan', 'Sam', 'Maya', 'Leo', 'Zara', 'Aarav', 'Kai',
+  'Elena', 'Noah', 'Chloe', 'Liam', 'Tara', 'Lucas', 'Isha', 'Oliver',
+  'Dev', 'Ananya', 'Felix', 'Sora', 'Vihaan', 'Kavya', 'Zane', 'Rhea'
+];
+
+export function getRandomFriendlyName(): string {
+  return RANDOM_NAMES[Math.floor(Math.random() * RANDOM_NAMES.length)];
+}
+
 function getInitialUser(): UserProfile {
   const saved = localStorage.getItem('dvide_current_user');
   if (saved) {
     try {
       const parsed = JSON.parse(saved);
       const clean = cleanMemberName(parsed.name);
-      if (clean && clean.toLowerCase() !== 'me') {
+      if (
+        clean &&
+        clean.toLowerCase() !== 'me' &&
+        clean.toLowerCase() !== 'you' &&
+        clean.toLowerCase() !== 'member' &&
+        !clean.toLowerCase().startsWith('user ')
+      ) {
         return { ...parsed, name: clean };
       }
     } catch {}
   }
-  const randomSuffix = Math.floor(100 + Math.random() * 900);
   return {
     id: 'u_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36).slice(-4),
-    name: `User ${randomSuffix}`,
+    name: getRandomFriendlyName(),
     email: '',
     avatar_url: '',
   };
@@ -81,10 +96,16 @@ export function useDVideStore() {
     if (!saved) return [];
     try {
       const parsed: RoomMember[] = JSON.parse(saved);
-      return parsed.map((m) => ({
-        ...m,
-        display_name: cleanMemberName(m.display_name),
-      }));
+      return parsed.map((m) => {
+        let name = cleanMemberName(m.display_name);
+        if (!name || name.toLowerCase() === 'me' || name.toLowerCase() === 'you' || name.toLowerCase() === 'member') {
+          name = getRandomFriendlyName();
+        }
+        return {
+          ...m,
+          display_name: name,
+        };
+      });
     } catch {
       return [];
     }
@@ -838,13 +859,13 @@ export function useDVideStore() {
 
   const updateProfileName = (newName: string) => {
     if (!newName.trim()) return;
-    const clean = newName.trim();
+    const clean = cleanMemberName(newName);
     setCurrentUser((prev) => ({ ...prev, name: clean }));
 
     if (currentRoom) {
       setMembers((prev) =>
         prev.map((m) =>
-          m.user_id === currentUser.id && m.room_id === currentRoom.id
+          m.user_id === currentUser.id && isMatchingRoom(m.room_id, currentRoom)
             ? { ...m, display_name: clean }
             : m
         )
@@ -865,16 +886,31 @@ export function useDVideStore() {
           },
         });
       }
+
+      const client = supabase;
+      if (client) {
+        (async () => {
+          try {
+            await client.from('room_members').upsert({
+              id: `m_${currentUser.id}`,
+              room_id: currentRoom.id,
+              user_id: currentUser.id,
+              display_name: clean,
+              avatar_url: currentUser.avatar_url,
+            });
+          } catch {}
+        })();
+      }
     }
   };
 
   const joinRoomByCode = async (code: string, userName?: string) => {
     const cleanCode = code.toUpperCase().trim();
     if (userName && userName.trim()) {
-      const cleanName = userName.trim();
+      const cleanName = cleanMemberName(userName.trim());
       setCurrentUser((prev) => ({ ...prev, name: cleanName }));
     }
-    const myName = userName?.trim() || currentUser.name || 'Member';
+    const myName = userName?.trim() || currentUser.name || getRandomFriendlyName();
 
     let targetRoom = rooms.find((r) => r.invite_code.toUpperCase() === cleanCode);
 

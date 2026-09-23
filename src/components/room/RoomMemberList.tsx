@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { GlassCard } from '../ui/GlassCard';
 import { Badge } from '../ui/Badge';
 import { formatCurrency } from '../../lib/calculations';
-import { UserPlus, UserCheck, Shield, Sparkles } from 'lucide-react';
+import { UserPlus, UserCheck, Shield, Sparkles, Pencil, Check } from 'lucide-react';
 import { RoomMember, MemberBalance, UserProfile } from '../../types';
 import { cleanMemberName } from '../../lib/store';
 
@@ -13,6 +13,7 @@ interface RoomMemberListProps {
   currency: string;
   onAddMember: (name: string) => void;
   onSwitchUser: (userId: string) => void;
+  onUpdateProfileName?: (name: string) => void;
 }
 
 export const RoomMemberList: React.FC<RoomMemberListProps> = ({
@@ -22,9 +23,19 @@ export const RoomMemberList: React.FC<RoomMemberListProps> = ({
   currency,
   onAddMember,
   onSwitchUser,
+  onUpdateProfileName,
 }) => {
   const [newMemberName, setNewMemberName] = useState('');
   const [isAdding, setIsAdding] = useState(false);
+  const [isEditingMyName, setIsEditingMyName] = useState(false);
+  const [editNameInput, setEditNameInput] = useState(cleanMemberName(currentUser.name));
+
+  const handleSaveMyName = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editNameInput.trim() || !onUpdateProfileName) return;
+    onUpdateProfileName(cleanMemberName(editNameInput));
+    setIsEditingMyName(false);
+  };
 
   const handleAddSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -169,12 +180,49 @@ export const RoomMemberList: React.FC<RoomMemberListProps> = ({
                       Switch to view as
                     </button>
                   ) : (
-                    <span className="text-[10px] text-[#8E8E93] mt-0.5 block">
-                      Active User
-                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditNameInput(cleanName);
+                        setIsEditingMyName(!isEditingMyName);
+                      }}
+                      className="text-[11px] font-medium text-ios-blue hover:text-white mt-1 transition-colors flex items-center gap-1 ml-auto"
+                      title="Edit your name"
+                    >
+                      <Pencil size={11} />
+                      <span>Edit Name</span>
+                    </button>
                   )}
                 </div>
               </div>
+
+              {/* Inline Name Editor for Active User */}
+              {isMe && isEditingMyName && (
+                <form onSubmit={handleSaveMyName} className="mt-3 pt-3 border-t border-white/[0.08] flex items-center gap-2 animate-in fade-in">
+                  <input
+                    type="text"
+                    autoFocus
+                    placeholder="Enter your name..."
+                    value={editNameInput}
+                    onChange={(e) => setEditNameInput(e.target.value)}
+                    className="flex-1 h-8 px-3 rounded-lg glass-input text-xs text-white"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!editNameInput.trim()}
+                    className="h-8 px-3 rounded-lg bg-ios-blue hover:bg-[#0071EB] disabled:opacity-40 text-xs font-semibold text-white transition-colors"
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingMyName(false)}
+                    className="h-8 px-2.5 rounded-lg text-xs text-[#8E8E93] hover:text-white"
+                  >
+                    Cancel
+                  </button>
+                </form>
+              )}
             </GlassCard>
           );
         })}

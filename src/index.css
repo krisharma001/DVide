@@ -88,46 +88,69 @@
   }
 
   /* iOS 27 Floating Capsule Dock & Dynamic Liquid Slider */
+  /* iOS 27 Liquid Glass Floating Capsule Dock (Matching Reference Image 1 & 2) */
   .glass-dock {
     position: relative;
-    background: linear-gradient(180deg, rgba(32, 32, 38, 0.88) 0%, rgba(18, 18, 22, 0.92) 100%);
-    backdrop-filter: blur(40px) saturate(220%) brightness(115%);
-    -webkit-backdrop-filter: blur(40px) saturate(220%) brightness(115%);
+    background: rgba(24, 24, 28, 0.75);
+    backdrop-filter: blur(40px) saturate(210%) brightness(110%);
+    -webkit-backdrop-filter: blur(40px) saturate(210%) brightness(110%);
     border: 1px solid rgba(255, 255, 255, 0.15);
     box-shadow: 
       inset 0 1px 1.5px 0 rgba(255, 255, 255, 0.28),
-      inset 0 -1px 1px 0 rgba(0, 0, 0, 0.4),
-      0 20px 48px -6px rgba(0, 0, 0, 0.75),
+      inset 0 -1px 1px 0 rgba(0, 0, 0, 0.45),
+      0 20px 48px -6px rgba(0, 0, 0, 0.8),
       0 4px 16px rgba(0, 0, 0, 0.4);
   }
 
-  .glass-slider-pill {
+  /* Liquid Glass Lens - Resting State (Image 1: Sleek dark translucent capsule) */
+  .liquid-lens {
     position: absolute;
     top: 0;
     left: 0;
     border-radius: 9999px;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.06) 100%);
-    backdrop-filter: blur(28px) saturate(220%);
-    -webkit-backdrop-filter: blur(28px) saturate(220%);
-    border: 1px solid rgba(255, 255, 255, 0.32);
+    background: rgba(14, 14, 18, 0.72);
+    backdrop-filter: blur(28px) saturate(190%);
+    -webkit-backdrop-filter: blur(28px) saturate(190%);
+    border: 1px solid rgba(255, 255, 255, 0.14);
     box-shadow: 
-      inset 0 1px 1.5px 0 rgba(255, 255, 255, 0.65),
-      inset 0 -1px 1px 0 rgba(0, 0, 0, 0.35),
-      0 4px 18px rgba(10, 132, 255, 0.38),
-      0 0 28px rgba(0, 122, 255, 0.22);
-    transition: transform 380ms cubic-bezier(0.16, 1, 0.3, 1), width 380ms cubic-bezier(0.16, 1, 0.3, 1), height 380ms cubic-bezier(0.16, 1, 0.3, 1), opacity 200ms ease;
+      inset 0 1px 1px 0 rgba(255, 255, 255, 0.35),
+      inset 0 -1px 1px 0 rgba(0, 0, 0, 0.4),
+      0 4px 16px rgba(0, 0, 0, 0.5);
+    transition: transform 340ms cubic-bezier(0.16, 1, 0.3, 1), 
+                width 340ms cubic-bezier(0.16, 1, 0.3, 1), 
+                height 340ms cubic-bezier(0.16, 1, 0.3, 1), 
+                opacity 180ms ease,
+                background 220ms ease,
+                box-shadow 220ms ease,
+                border-color 220ms ease;
     pointer-events: none;
     z-index: 1;
     will-change: transform, width, height;
   }
 
-  .glass-slider-pill.is-dragging {
-    transition: opacity 150ms ease !important;
+  /* Liquid Glass Lens - Touched & Sliding State (Image 2: Rainbow Prismatic Chromatic Dispersion) */
+  .liquid-lens.is-active-touched {
+    background: rgba(28, 28, 34, 0.55);
+    backdrop-filter: blur(22px) saturate(240%) brightness(125%);
+    -webkit-backdrop-filter: blur(22px) saturate(240%) brightness(125%);
+    border-color: rgba(255, 255, 255, 0.45);
     box-shadow: 
-      inset 0 1px 1.5px 0 rgba(255, 255, 255, 0.8),
-      inset 0 -1px 1px 0 rgba(0, 0, 0, 0.4),
-      0 6px 24px rgba(10, 132, 255, 0.55),
-      0 0 36px rgba(0, 122, 255, 0.35);
+      /* Specular Top Rim Reflection */
+      inset 0 1.5px 2px 0 rgba(255, 255, 255, 0.95),
+      inset 0 -1.5px 1.5px 0 rgba(0, 0, 0, 0.55),
+      /* Chromatic Dispersion: Electric Cyan/Blue on left rim */
+      inset 3.5px 0 6px -1px rgba(0, 225, 255, 0.85),
+      /* Chromatic Dispersion: Amber/Magenta on right rim */
+      inset -3.5px 0 6px -1px rgba(255, 115, 30, 0.85),
+      /* Outer Rainbow Refraction Aura */
+      0 0 1px 1px rgba(255, 255, 255, 0.5),
+      0 0 16px 2px rgba(0, 190, 255, 0.45),
+      0 0 24px 3px rgba(255, 90, 190, 0.35),
+      0 10px 30px rgba(0, 0, 0, 0.7);
+  }
+
+  .liquid-lens.is-dragging {
+    transition: opacity 120ms ease, box-shadow 200ms ease, border-color 200ms ease !important;
   }
 
   .glass-dock-btn {

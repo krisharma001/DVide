@@ -3,6 +3,7 @@ import { LayoutDashboard, Receipt, Scale, MessageCircle, Plus } from 'lucide-rea
 import { clsx } from 'clsx';
 
 export type ActiveTab = 'overview' | 'expenses' | 'settle' | 'chat' | 'people';
+type DockTab = 'overview' | 'expenses' | 'settle' | 'chat';
 
 interface TabBarProps {
   activeTab: ActiveTab;
@@ -18,7 +19,7 @@ export const TabBar: React.FC<TabBarProps> = ({
   unreadCount = 0,
 }) => {
   const navRef = useRef<HTMLElement>(null);
-  const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({
+  const tabRefs = useRef<Record<DockTab, HTMLButtonElement | null>>({
     overview: null,
     expenses: null,
     settle: null,
@@ -33,15 +34,19 @@ export const TabBar: React.FC<TabBarProps> = ({
     opacity: number;
   }>({ left: 0, top: 0, width: 0, height: 0, opacity: 0 });
 
-  type DockTab = 'overview' | 'expenses' | 'settle' | 'chat';
+  const [isDragging, setIsDragging] = useState(false);
+  const [isTouched, setIsTouched] = useState(false);
+  const [dragActiveTab, setDragActiveTab] = useState<DockTab | null>(null);
+
   const TABS: DockTab[] = ['overview', 'expenses', 'settle', 'chat'];
 
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragTab, setDragTab] = useState<DockTab | null>(null);
-
-  // Calculate indicator position matching the active button's exact bounding box
+  // Smoothly position indicator over target tab's exact bounding box
   const updateIndicatorToTab = useCallback((tab: ActiveTab) => {
-    const activeEl = tabRefs.current[tab];
+    if (tab === 'people') {
+      setIndicatorStyle((prev) => ({ ...prev, opacity: 0 }));
+      return;
+    }
+    const activeEl = tabRefs.current[tab as DockTab];
     const navEl = navRef.current;
     if (activeEl && navEl) {
       const activeRect = activeEl.getBoundingClientRect();
@@ -51,7 +56,7 @@ export const TabBar: React.FC<TabBarProps> = ({
         top: Math.round(activeRect.top - navRect.top),
         width: Math.round(activeRect.width),
         height: Math.round(activeRect.height),
-        opacity: tab === 'people' ? 0 : 1,
+        opacity: 1,
       });
     }
   }, []);
@@ -62,14 +67,14 @@ export const TabBar: React.FC<TabBarProps> = ({
     }
     const handleResize = () => updateIndicatorToTab(activeTab);
     window.addEventListener('resize', handleResize);
-    const timer = setTimeout(() => updateIndicatorToTab(activeTab), 40);
+    const timer = setTimeout(() => updateIndicatorToTab(activeTab), 30);
     return () => {
       window.removeEventListener('resize', handleResize);
       clearTimeout(timer);
     };
   }, [activeTab, isDragging, updateIndicatorToTab]);
 
-  // Find the closest tab to a given screen clientX
+  // Find which tab is closest to a horizontal coordinate
   const getClosestTab = (clientX: number): DockTab => {
     let closestTab: DockTab = activeTab === 'people' ? 'overview' : (activeTab as DockTab);
     let minDistance = Infinity;
@@ -89,9 +94,9 @@ export const TabBar: React.FC<TabBarProps> = ({
     return closestTab;
   };
 
-  // --- Real-time Liquid Glass Drag / Slide Handlers ---
+  // --- Real-time Liquid Glass Drag & Sliding Gesture Handlers ---
   const handlePointerDown = (e: React.PointerEvent<HTMLElement>) => {
-    // Ignore if clicked on the center + button
+    // If user clicked the center action (+) button, don't initiate tab drag
     const target = e.target as HTMLElement;
     if (target.closest('[data-center-action]')) return;
 
@@ -100,13 +105,16 @@ export const TabBar: React.FC<TabBarProps> = ({
         e.currentTarget.setPointerCapture(e.pointerId);
       } catch {}
     }
+
     setIsDragging(true);
+    setIsTouched(true);
+
     const initialTab = getClosestTab(e.clientX);
-    setDragTab(initialTab);
+    setDragActiveTab(initialTab);
     updateDragPosition(e.clientX, initialTab);
   };
 
-  const updateDragPosition = (clientX: number, targetTab: ActiveTab) => {
+  const updateDragPosition = (clientX: number, targetTab: DockTab) => {
     const navEl = navRef.current;
     const tabEl = tabRefs.current[targetTab];
     if (!navEl || !tabEl) return;
@@ -118,12 +126,12 @@ export const TabBar: React.FC<TabBarProps> = ({
     const currentPointerX = clientX - navRect.left;
     const delta = currentPointerX - idealCenterX;
 
-    // Viscous liquid stretch physics
-    const stretch = Math.min(22, Math.abs(delta) * 0.28);
+    // Fluid Viscous Stretch: stretches dynamically in the direction of the drag
+    const stretch = Math.min(26, Math.abs(delta) * 0.3);
     const stretchLeftOffset = delta > 0 ? 0 : stretch;
 
     setIndicatorStyle({
-      left: Math.round(tabRect.left - navRect.left + delta * 0.4 - stretchLeftOffset),
+      left: Math.round(tabRect.left - navRect.left + delta * 0.45 - stretchLeftOffset),
       top: Math.round(tabRect.top - navRect.top),
       width: Math.round(tabRect.width + stretch),
       height: Math.round(tabRect.height),
@@ -134,7 +142,7 @@ export const TabBar: React.FC<TabBarProps> = ({
   const handlePointerMove = (e: React.PointerEvent<HTMLElement>) => {
     if (!isDragging) return;
     const closest = getClosestTab(e.clientX);
-    setDragTab(closest);
+    setDragActiveTab(closest);
     updateDragPosition(e.clientX, closest);
   };
 
@@ -145,14 +153,30 @@ export const TabBar: React.FC<TabBarProps> = ({
         e.currentTarget.releasePointerCapture(e.pointerId);
       } catch {}
     }
+
     setIsDragging(false);
     const finalTab = getClosestTab(e.clientX);
-    setDragTab(null);
+    setDragActiveTab(null);
     onChangeTab(finalTab);
     updateIndicatorToTab(finalTab);
+
+    // Keep touched chromatic dispersion active briefly to allow smooth relaxation
+    setTimeout(() => {
+      setIsTouched(false);
+    }, 280);
   };
 
-  const displayedTab = isDragging ? dragTab || activeTab : activeTab;
+  const handleTabClick = (tab: DockTab) => {
+    // When clicked directly, trigger a brief touched bloom during the glide
+    setIsTouched(true);
+    onChangeTab(tab);
+    updateIndicatorToTab(tab);
+    setTimeout(() => {
+      setIsTouched(false);
+    }, 320);
+  };
+
+  const currentTab = isDragging ? dragActiveTab || activeTab : activeTab;
 
   return (
     <div className="fixed bottom-3 sm:bottom-5 left-0 right-0 z-40 flex justify-center pointer-events-none px-4">
@@ -167,9 +191,13 @@ export const TabBar: React.FC<TabBarProps> = ({
         onPointerCancel={handlePointerUp}
         className="pointer-events-auto glass-dock rounded-full p-1.5 flex items-center justify-between w-full max-w-sm shadow-[0_20px_50px_rgba(0,0,0,0.8),0_0_25px_rgba(0,122,255,0.15)] relative touch-none select-none"
       >
-        {/* Physical Liquid Glass Sliding Indicator */}
+        {/* Physical Liquid Glass Lens (Resting: Image 1 | Touched/Sliding: Image 2 with Rainbow Caustics) */}
         <div
-          className={clsx('glass-slider-pill', isDragging && 'is-dragging')}
+          className={clsx(
+            'liquid-lens',
+            (isDragging || isTouched) && 'is-active-touched',
+            isDragging && 'is-dragging'
+          )}
           style={{
             transform: `translateX(${indicatorStyle.left}px) translateY(${indicatorStyle.top}px)`,
             width: `${indicatorStyle.width}px`,
@@ -178,62 +206,61 @@ export const TabBar: React.FC<TabBarProps> = ({
           }}
         />
 
-        {/* LEFT WING: Summary & Bills (50% of left space) */}
-        <div className="flex-1 flex items-center justify-around gap-1">
-          {/* Tab 1: Overview */}
-          <button
-            ref={(el) => { tabRefs.current.overview = el; }}
-            type="button"
-            onClick={() => onChangeTab('overview')}
-            className={clsx(
-              'relative z-10 flex-1 flex flex-col items-center justify-center h-12 px-2 rounded-full transition-all duration-300 ios-touch cursor-pointer',
-              displayedTab === 'overview' ? 'text-white' : 'text-[#8E8E93] hover:text-[#D1D1D6]'
-            )}
-          >
-            <div className="flex flex-col items-center justify-center -space-y-0.5">
-              <LayoutDashboard
-                size={18}
-                strokeWidth={displayedTab === 'overview' ? 2.5 : 1.8}
-                className={clsx(
-                  'transition-all duration-300',
-                  displayedTab === 'overview'
-                    ? 'text-[#0A84FF] filter drop-shadow-[0_0_10px_rgba(10,132,255,0.8)] scale-110'
-                    : ''
-                )}
-              />
-              <span className="text-[10px] font-semibold tracking-tight mt-1 leading-tight">
-                Summary
-              </span>
-            </div>
-          </button>
+        {/* Tab 1: Overview / Summary */}
+        <button
+          ref={(el) => { tabRefs.current.overview = el; }}
+          type="button"
+          onClick={() => handleTabClick('overview')}
+          className={clsx(
+            'relative z-10 flex-1 flex flex-col items-center justify-center h-12 px-2 rounded-full transition-all duration-300 ios-touch cursor-pointer',
+            currentTab === 'overview' ? 'text-white' : 'text-[#8E8E93] hover:text-[#D1D1D6]'
+          )}
+        >
+          <div className="flex flex-col items-center justify-center -space-y-0.5">
+            <LayoutDashboard
+              size={18}
+              strokeWidth={currentTab === 'overview' ? 2.5 : 1.8}
+              fill={currentTab === 'overview' ? 'currentColor' : 'none'}
+              className={clsx(
+                'transition-all duration-300',
+                currentTab === 'overview'
+                  ? 'text-white filter drop-shadow-[0_0_8px_rgba(255,255,255,0.7)] scale-110'
+                  : 'text-[#8E8E93]'
+              )}
+            />
+            <span className="text-[10px] font-semibold tracking-tight mt-1 leading-tight">
+              Summary
+            </span>
+          </div>
+        </button>
 
-          {/* Tab 2: Expenses */}
-          <button
-            ref={(el) => { tabRefs.current.expenses = el; }}
-            type="button"
-            onClick={() => onChangeTab('expenses')}
-            className={clsx(
-              'relative z-10 flex-1 flex flex-col items-center justify-center h-12 px-2 rounded-full transition-all duration-300 ios-touch cursor-pointer',
-              displayedTab === 'expenses' ? 'text-white' : 'text-[#8E8E93] hover:text-[#D1D1D6]'
-            )}
-          >
-            <div className="flex flex-col items-center justify-center -space-y-0.5">
-              <Receipt
-                size={18}
-                strokeWidth={displayedTab === 'expenses' ? 2.5 : 1.8}
-                className={clsx(
-                  'transition-all duration-300',
-                  displayedTab === 'expenses'
-                    ? 'text-[#0A84FF] filter drop-shadow-[0_0_10px_rgba(10,132,255,0.8)] scale-110'
-                    : ''
-                )}
-              />
-              <span className="text-[10px] font-semibold tracking-tight mt-1 leading-tight">
-                Bills
-              </span>
-            </div>
-          </button>
-        </div>
+        {/* Tab 2: Expenses / Bills */}
+        <button
+          ref={(el) => { tabRefs.current.expenses = el; }}
+          type="button"
+          onClick={() => handleTabClick('expenses')}
+          className={clsx(
+            'relative z-10 flex-1 flex flex-col items-center justify-center h-12 px-2 rounded-full transition-all duration-300 ios-touch cursor-pointer',
+            currentTab === 'expenses' ? 'text-white' : 'text-[#8E8E93] hover:text-[#D1D1D6]'
+          )}
+        >
+          <div className="flex flex-col items-center justify-center -space-y-0.5">
+            <Receipt
+              size={18}
+              strokeWidth={currentTab === 'expenses' ? 2.5 : 1.8}
+              fill={currentTab === 'expenses' ? 'currentColor' : 'none'}
+              className={clsx(
+                'transition-all duration-300',
+                currentTab === 'expenses'
+                  ? 'text-white filter drop-shadow-[0_0_8px_rgba(255,255,255,0.7)] scale-110'
+                  : 'text-[#8E8E93]'
+              )}
+            />
+            <span className="text-[10px] font-semibold tracking-tight mt-1 leading-tight">
+              Bills
+            </span>
+          </div>
+        </button>
 
         {/* CENTER ACTION: Symmetrically Centered Luminous Liquid Glass (+) Button */}
         <div data-center-action className="px-1.5 flex items-center justify-center relative z-20 shrink-0">
@@ -252,67 +279,66 @@ export const TabBar: React.FC<TabBarProps> = ({
           </button>
         </div>
 
-        {/* RIGHT WING: Settle & Chat (50% of right space) */}
-        <div className="flex-1 flex items-center justify-around gap-1">
-          {/* Tab 3: Settle */}
-          <button
-            ref={(el) => { tabRefs.current.settle = el; }}
-            type="button"
-            onClick={() => onChangeTab('settle')}
-            className={clsx(
-              'relative z-10 flex-1 flex flex-col items-center justify-center h-12 px-2 rounded-full transition-all duration-300 ios-touch cursor-pointer',
-              displayedTab === 'settle' ? 'text-white' : 'text-[#8E8E93] hover:text-[#D1D1D6]'
-            )}
-          >
-            <div className="flex flex-col items-center justify-center -space-y-0.5">
-              <Scale
+        {/* Tab 3: Settle */}
+        <button
+          ref={(el) => { tabRefs.current.settle = el; }}
+          type="button"
+          onClick={() => handleTabClick('settle')}
+          className={clsx(
+            'relative z-10 flex-1 flex flex-col items-center justify-center h-12 px-2 rounded-full transition-all duration-300 ios-touch cursor-pointer',
+            currentTab === 'settle' ? 'text-white' : 'text-[#8E8E93] hover:text-[#D1D1D6]'
+          )}
+        >
+          <div className="flex flex-col items-center justify-center -space-y-0.5">
+            <Scale
+              size={18}
+              strokeWidth={currentTab === 'settle' ? 2.5 : 1.8}
+              fill={currentTab === 'settle' ? 'currentColor' : 'none'}
+              className={clsx(
+                'transition-all duration-300',
+                currentTab === 'settle'
+                  ? 'text-white filter drop-shadow-[0_0_8px_rgba(255,255,255,0.7)] scale-110'
+                  : 'text-[#8E8E93]'
+              )}
+            />
+            <span className="text-[10px] font-semibold tracking-tight mt-1 leading-tight">
+              Settle
+            </span>
+          </div>
+        </button>
+
+        {/* Tab 4: Chat */}
+        <button
+          ref={(el) => { tabRefs.current.chat = el; }}
+          type="button"
+          onClick={() => handleTabClick('chat')}
+          className={clsx(
+            'relative z-10 flex-1 flex flex-col items-center justify-center h-12 px-2 rounded-full transition-all duration-300 ios-touch cursor-pointer',
+            currentTab === 'chat' ? 'text-white' : 'text-[#8E8E93] hover:text-[#D1D1D6]'
+          )}
+        >
+          <div className="flex flex-col items-center justify-center -space-y-0.5">
+            <div className="relative">
+              <MessageCircle
                 size={18}
-                strokeWidth={displayedTab === 'settle' ? 2.5 : 1.8}
+                strokeWidth={currentTab === 'chat' ? 2.5 : 1.8}
+                fill={currentTab === 'chat' ? 'currentColor' : 'none'}
                 className={clsx(
                   'transition-all duration-300',
-                  displayedTab === 'settle'
-                    ? 'text-[#0A84FF] filter drop-shadow-[0_0_10px_rgba(10,132,255,0.8)] scale-110'
-                    : ''
+                  currentTab === 'chat'
+                    ? 'text-white filter drop-shadow-[0_0_8px_rgba(255,255,255,0.7)] scale-110'
+                    : 'text-[#8E8E93]'
                 )}
               />
-              <span className="text-[10px] font-semibold tracking-tight mt-1 leading-tight">
-                Settle
-              </span>
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-[#FF3B30] ring-2 ring-[#121214] animate-pulse" />
+              )}
             </div>
-          </button>
-
-          {/* Tab 4: Chat */}
-          <button
-            ref={(el) => { tabRefs.current.chat = el; }}
-            type="button"
-            onClick={() => onChangeTab('chat')}
-            className={clsx(
-              'relative z-10 flex-1 flex flex-col items-center justify-center h-12 px-2 rounded-full transition-all duration-300 ios-touch cursor-pointer',
-              displayedTab === 'chat' ? 'text-white' : 'text-[#8E8E93] hover:text-[#D1D1D6]'
-            )}
-          >
-            <div className="flex flex-col items-center justify-center -space-y-0.5">
-              <div className="relative">
-                <MessageCircle
-                  size={18}
-                  strokeWidth={displayedTab === 'chat' ? 2.5 : 1.8}
-                  className={clsx(
-                    'transition-all duration-300',
-                    displayedTab === 'chat'
-                      ? 'text-[#0A84FF] filter drop-shadow-[0_0_10px_rgba(10,132,255,0.8)] scale-110'
-                      : ''
-                  )}
-                />
-                {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-[#FF3B30] ring-2 ring-[#121214] animate-pulse" />
-                )}
-              </div>
-              <span className="text-[10px] font-semibold tracking-tight mt-1 leading-tight">
-                Chat
-              </span>
-            </div>
-          </button>
-        </div>
+            <span className="text-[10px] font-semibold tracking-tight mt-1 leading-tight">
+              Chat
+            </span>
+          </div>
+        </button>
       </nav>
     </div>
   );

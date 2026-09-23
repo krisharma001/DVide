@@ -178,7 +178,3 @@ It provisions:
 This project is licensed under the [MIT License](LICENSE).
 
 ---
-
-<div align="center">
-Made with 💚 by <strong>Krish Sharma</strong>
-</div>

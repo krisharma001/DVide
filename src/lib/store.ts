@@ -12,18 +12,41 @@ import { generateSettlementTransfers } from './settlementEngine';
 import { supabase, isSupabaseConfigured } from './supabase';
 import { RealtimeChannel } from '@supabase/supabase-js';
 
-const DEFAULT_USER: UserProfile = {
-  id: 'u_' + Math.random().toString(36).substring(2, 9),
-  name: 'Me',
-  email: '',
-  avatar_url: '',
-};
+export function isMatchingRoom(targetRoomId: string | undefined, room: Room | null): boolean {
+  if (!room || !targetRoomId) return false;
+  if (targetRoomId === room.id) return true;
+  if (room.invite_code) {
+    const code = room.invite_code.toUpperCase().trim();
+    const cleanTarget = targetRoomId.toUpperCase().trim();
+    if (
+      cleanTarget === code ||
+      cleanTarget === `ROOM_${code}` ||
+      cleanTarget.replace('ROOM_', '') === code ||
+      (room.id && cleanTarget === room.id.toUpperCase())
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function getInitialUser(): UserProfile {
+  const saved = localStorage.getItem('dvide_current_user');
+  if (saved) {
+    try {
+      return JSON.parse(saved);
+    } catch {}
+  }
+  return {
+    id: 'u_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36).slice(-4),
+    name: 'Me',
+    email: '',
+    avatar_url: '',
+  };
+}
 
 export function useDVideStore() {
-  const [currentUser, setCurrentUser] = useState<UserProfile>(() => {
-    const saved = localStorage.getItem('dvide_current_user');
-    return saved ? JSON.parse(saved) : DEFAULT_USER;
-  });
+  const [currentUser, setCurrentUser] = useState<UserProfile>(getInitialUser);
 
   const [rooms, setRooms] = useState<Room[]>(() => {
     const saved = localStorage.getItem('dvide_all_rooms');
@@ -62,10 +85,34 @@ export function useDVideStore() {
     return saved ? JSON.parse(saved) : [];
   });
 
-  // Active room data filters
-  const roomMembers = currentRoom ? members.filter((m) => m.room_id === currentRoom.id) : [];
-  const roomExpenses = currentRoom ? expenses.filter((e) => e.room_id === currentRoom.id) : [];
-  const roomChats = currentRoom ? chats.filter((c) => c.room_id === currentRoom.id) : [];
+  // Automatically migrate legacy room IDs to canonical format room_<INVITE_CODE>
+  useEffect(() => {
+    if (currentRoom?.invite_code) {
+      const canonicalId = `room_${currentRoom.invite_code.toUpperCase().trim()}`;
+      if (currentRoom.id !== canonicalId) {
+        console.log(`[DVide] Migrating room ID from ${currentRoom.id} to ${canonicalId}`);
+        const updated = { ...currentRoom, id: canonicalId };
+        setCurrentRoom(updated);
+        setRooms((prev) =>
+          prev.map((r) =>
+            r.invite_code.toUpperCase() === currentRoom.invite_code.toUpperCase()
+              ? { ...r, id: canonicalId }
+              : r
+          )
+        );
+        setMembers((prev) =>
+          prev.map((m) =>
+            isMatchingRoom(m.room_id, updated) ? { ...m, room_id: canonicalId } : m
+          )
+        );
+      }
+    }
+  }, [currentRoom?.invite_code, currentRoom?.id]);
+
+  // Active room data filters (fuzzy matching room_id so legacy IDs never drop data)
+  const roomMembers = currentRoom ? members.filter((m) => isMatchingRoom(m.room_id, currentRoom)) : [];
+  const roomExpenses = currentRoom ? expenses.filter((e) => isMatchingRoom(e.room_id, currentRoom)) : [];
+  const roomChats = currentRoom ? chats.filter((c) => isMatchingRoom(c.room_id, currentRoom)) : [];
 
   const memberBalances = calculateMemberBalances(roomMembers, roomExpenses);
   const roomSummary = calculateRoomSummary(roomMembers, roomExpenses);
@@ -182,14 +229,17 @@ export function useDVideStore() {
     // 4. Listen for new members joining or updating name
     channel.on('broadcast', { event: 'new_member' }, ({ payload }) => {
       console.log('[DVide Realtime] Received new_member broadcast:', payload);
+      if (!payload || !payload.user_id) return;
       setMembers((prev) => {
-        const existingIdx = prev.findIndex((m) => m.room_id === payload.room_id && m.user_id === payload.user_id);
+        const existingIdx = prev.findIndex(
+          (m) => m.user_id === payload.user_id && isMatchingRoom(m.room_id, currentRoom)
+        );
         if (existingIdx >= 0) {
           const updated = [...prev];
-          updated[existingIdx] = { ...updated[existingIdx], ...payload };
+          updated[existingIdx] = { ...updated[existingIdx], ...payload, is_online: true };
           return updated;
         }
-        return [...prev, payload];
+        return [...prev, { ...payload, is_online: true }];
       });
     });
 
@@ -209,8 +259,23 @@ export function useDVideStore() {
     });
 
     // 6. Peer-to-Peer Room State Sync (when someone joins via room code)
-    channel.on('broadcast', { event: 'request_room_sync' }, () => {
-      console.log('[DVide Realtime] Received request_room_sync, sending latest state...');
+    channel.on('broadcast', { event: 'request_room_sync' }, ({ payload }) => {
+      console.log('[DVide Realtime] Received request_room_sync from:', payload);
+      // Auto-register the requester as a member if their info was provided
+      if (payload?.member) {
+        setMembers((prev) => {
+          const exists = prev.some(
+            (m) => m.user_id === payload.member.user_id && isMatchingRoom(m.room_id, currentRoom)
+          );
+          if (exists) {
+            return prev.map((m) =>
+              m.user_id === payload.member.user_id ? { ...m, ...payload.member, is_online: true } : m
+            );
+          }
+          return [...prev, { ...payload.member, is_online: true }];
+        });
+      }
+
       const state = stateRef.current;
       if (!state.currentRoom) return;
 
@@ -222,7 +287,7 @@ export function useDVideStore() {
           members: state.roomMembers,
           expenses: state.roomExpenses,
           chats: state.roomChats,
-          settlements: state.settlements.filter((s) => s.room_id === state.currentRoom?.id),
+          settlements: state.settlements.filter((s) => isMatchingRoom(s.room_id, state.currentRoom)),
         },
       });
     });
@@ -240,9 +305,9 @@ export function useDVideStore() {
           };
         });
         setRooms((prev) => {
-          if (prev.some((r) => r.id === payload.room.id)) {
+          if (prev.some((r) => isMatchingRoom(r.id, payload.room))) {
             return prev.map((r) =>
-              r.id === payload.room.id
+              isMatchingRoom(r.id, payload.room)
                 ? { ...r, name: payload.room.name || r.name, currency: payload.room.currency || r.currency }
                 : r
             );
@@ -253,47 +318,96 @@ export function useDVideStore() {
 
       if (payload.members?.length) {
         setMembers((prev) => {
-          const existingIds = new Set(prev.map((m) => m.id));
-          const fresh = payload.members.filter((m: RoomMember) => !existingIds.has(m.id));
+          const existingUserIds = new Set(prev.map((m) => m.user_id));
+          const fresh = payload.members
+            .filter((m: RoomMember) => !existingUserIds.has(m.user_id))
+            .map((m: RoomMember) => ({ ...m, room_id: currentRoom.id, is_online: true }));
           return [...prev, ...fresh];
         });
       }
       if (payload.expenses?.length) {
         setExpenses((prev) => {
           const existingIds = new Set(prev.map((e) => e.id));
-          const fresh = payload.expenses.filter((e: Expense) => !existingIds.has(e.id));
+          const fresh = payload.expenses
+            .filter((e: Expense) => !existingIds.has(e.id))
+            .map((e: Expense) => ({ ...e, room_id: currentRoom.id }));
           return [...prev, ...fresh];
         });
       }
       if (payload.chats?.length) {
         setChats((prev) => {
           const existingIds = new Set(prev.map((c) => c.id));
-          const fresh = payload.chats.filter((c: ChatMessage) => !existingIds.has(c.id));
+          const fresh = payload.chats
+            .filter((c: ChatMessage) => !existingIds.has(c.id))
+            .map((c: ChatMessage) => ({ ...c, room_id: currentRoom.id }));
           return [...prev, ...fresh];
         });
       }
       if (payload.settlements?.length) {
         setSettlements((prev) => {
           const existingIds = new Set(prev.map((s) => s.id));
-          const fresh = payload.settlements.filter((s: SettlementRecord) => !existingIds.has(s.id));
+          const fresh = payload.settlements
+            .filter((s: SettlementRecord) => !existingIds.has(s.id))
+            .map((s: SettlementRecord) => ({ ...s, room_id: currentRoom.id }));
           return [...prev, ...fresh];
         });
       }
     });
 
-    // 7. Presence: Track who is currently online
-    channel.on('presence', { event: 'sync' }, () => {
-      const state = channel.presenceState();
-      const onlineUserIds = new Set(Object.keys(state));
-      setMembers((prev) =>
-        prev.map((m) => ({
-          ...m,
-          is_online: onlineUserIds.has(m.user_id) || m.user_id === currentUser.id,
-        }))
-      );
-    });
+    // 7. Presence: Track who is currently online and auto-discover peers
+    const handlePresenceUpdate = () => {
+      const pState = channel.presenceState();
+      console.log('[DVide Realtime] Presence state updated:', pState);
 
-    // Subscribe and track presence
+      const onlineUserMap = new Map<string, { user_id: string; name: string }>();
+      Object.values(pState).forEach((presences: any) => {
+        presences.forEach((p: any) => {
+          if (p.user_id) {
+            onlineUserMap.set(p.user_id, {
+              user_id: p.user_id,
+              name: p.name || 'Member',
+            });
+          }
+        });
+      });
+
+      setMembers((prev) => {
+        let updated = [...prev];
+        // Automatically add any presence user who is online but not yet in members!
+        onlineUserMap.forEach(({ user_id, name }) => {
+          const exists = updated.some(
+            (m) => m.user_id === user_id && isMatchingRoom(m.room_id, currentRoom)
+          );
+          if (!exists && currentRoom) {
+            console.log(`[DVide Realtime] Discovered new online member from presence: ${name} (${user_id})`);
+            updated.push({
+              id: `m_${user_id}`,
+              room_id: currentRoom.id,
+              user_id: user_id,
+              display_name: name,
+              avatar_url: '',
+              joined_at: new Date().toISOString(),
+              is_online: true,
+            });
+          }
+        });
+
+        return updated.map((m) => {
+          const isOnline = onlineUserMap.has(m.user_id) || m.user_id === currentUser.id;
+          const freshName = onlineUserMap.get(m.user_id)?.name;
+          return {
+            ...m,
+            is_online: isOnline,
+            display_name: freshName && freshName !== 'Me' ? freshName : m.display_name,
+          };
+        });
+      });
+    };
+
+    channel.on('presence', { event: 'sync' }, handlePresenceUpdate);
+    channel.on('presence', { event: 'join' }, handlePresenceUpdate);
+
+    // Subscribe, track presence, and announce membership
     channel.subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
         console.log(`[DVide Realtime] Subscribed to ${channelName}!`);
@@ -303,11 +417,31 @@ export function useDVideStore() {
           online_at: new Date().toISOString(),
         });
 
+        const myMemberPayload: RoomMember = {
+          id: `m_${currentUser.id}`,
+          room_id: currentRoom.id,
+          user_id: currentUser.id,
+          display_name: currentUser.name,
+          avatar_url: currentUser.avatar_url,
+          joined_at: new Date().toISOString(),
+          is_online: true,
+        };
+
+        // Immediately broadcast new_member to all connected peers
+        channel.send({
+          type: 'broadcast',
+          event: 'new_member',
+          payload: myMemberPayload,
+        });
+
         // Ask existing peers in this room for latest state
         channel.send({
           type: 'broadcast',
           event: 'request_room_sync',
-          payload: { user_id: currentUser.id },
+          payload: {
+            user_id: currentUser.id,
+            member: myMemberPayload,
+          },
         });
       }
     });
@@ -683,8 +817,14 @@ export function useDVideStore() {
     }
   };
 
-  const joinRoomByCode = async (code: string) => {
+  const joinRoomByCode = async (code: string, userName?: string) => {
     const cleanCode = code.toUpperCase().trim();
+    if (userName && userName.trim()) {
+      const cleanName = userName.trim();
+      setCurrentUser((prev) => ({ ...prev, name: cleanName }));
+    }
+    const myName = userName?.trim() || currentUser.name || 'Member';
+
     let targetRoom = rooms.find((r) => r.invite_code.toUpperCase() === cleanCode);
 
     const client = supabase;
@@ -717,7 +857,7 @@ export function useDVideStore() {
     }
 
     setRooms((prev) => {
-      if (prev.some((r) => r.id === targetRoom!.id)) return prev;
+      if (prev.some((r) => isMatchingRoom(r.id, targetRoom))) return prev;
       return [targetRoom!, ...prev];
     });
     setCurrentRoom(targetRoom);
@@ -727,34 +867,22 @@ export function useDVideStore() {
       id: `m_${currentUser.id}_${Date.now()}`,
       room_id: targetRoom.id,
       user_id: currentUser.id,
-      display_name: currentUser.name,
+      display_name: myName,
       avatar_url: currentUser.avatar_url,
       joined_at: new Date().toISOString(),
       is_online: true,
     };
 
     setMembers((prev) => {
-      if (prev.some((m) => m.room_id === targetRoom!.id && m.user_id === currentUser.id)) {
-        return prev;
+      if (prev.some((m) => isMatchingRoom(m.room_id, targetRoom) && m.user_id === currentUser.id)) {
+        return prev.map((m) =>
+          m.user_id === currentUser.id && isMatchingRoom(m.room_id, targetRoom)
+            ? { ...m, display_name: myName, is_online: true }
+            : m
+        );
       }
       return [...prev, newMember];
     });
-
-    // 🚀 Broadcast to any peers in this room that we joined
-    setTimeout(() => {
-      if (channelRef.current) {
-        channelRef.current.send({
-          type: 'broadcast',
-          event: 'new_member',
-          payload: newMember,
-        });
-        channelRef.current.send({
-          type: 'broadcast',
-          event: 'request_room_sync',
-          payload: { user_id: currentUser.id },
-        });
-      }
-    }, 400);
 
     return true;
   };
@@ -811,7 +939,7 @@ export function useDVideStore() {
 
   const clearAllData = () => {
     localStorage.clear();
-    setCurrentUser(DEFAULT_USER);
+    setCurrentUser(getInitialUser());
     setCurrentRoom(null);
     setRooms([]);
     setMembers([]);

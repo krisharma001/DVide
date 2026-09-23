@@ -19,7 +19,7 @@ export const NavigationBar: React.FC<NavigationBarProps> = ({
   onOpenInvite,
   onOpenSettings,
 }) => {
-  const onlineCount = members.filter((m) => m.is_online).length;
+  const onlineCount = Math.max(1, members.filter((m) => m.is_online).length);
 
   return (
     <header className="sticky top-0 z-40 w-full glass-header pt-safe">

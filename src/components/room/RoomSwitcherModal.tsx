@@ -10,7 +10,7 @@ interface RoomSwitcherModalProps {
   rooms: Room[];
   onSelectRoom: (roomId: string) => void;
   onCreateRoom: (name: string, currency: string) => void;
-  onJoinRoom: (code: string) => void;
+  onJoinRoom: (code: string, userName?: string) => void;
   onResetDemo: () => void;
 }
 
@@ -30,6 +30,7 @@ export const RoomSwitcherModal: React.FC<RoomSwitcherModalProps> = ({
   const [newRoomName, setNewRoomName] = useState('');
   const [currency, setCurrency] = useState('₹');
   const [inviteCode, setInviteCode] = useState('');
+  const [joinUserName, setJoinUserName] = useState('');
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,8 +43,9 @@ export const RoomSwitcherModal: React.FC<RoomSwitcherModalProps> = ({
   const handleJoin = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inviteCode.trim()) return;
-    onJoinRoom(inviteCode.trim());
+    onJoinRoom(inviteCode.trim(), joinUserName.trim() || undefined);
     setInviteCode('');
+    setJoinUserName('');
     onClose();
   };
 
@@ -208,6 +210,19 @@ export const RoomSwitcherModal: React.FC<RoomSwitcherModalProps> = ({
                 value={inviteCode}
                 onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
                 className="w-full h-12 px-3 rounded-xl glass-input text-center text-lg font-mono font-bold uppercase tracking-widest text-white"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-[#8E8E93] uppercase tracking-wider block mb-1.5">
+                Your Display Name (Optional)
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Rahul, Priya, Alex"
+                value={joinUserName}
+                onChange={(e) => setJoinUserName(e.target.value)}
+                className="w-full h-11 px-3 rounded-xl glass-input text-sm text-white"
               />
             </div>
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useDVideStore } from './lib/store';
 import { NavigationBar } from './components/layout/NavigationBar';
 import { TabBar, ActiveTab } from './components/layout/TabBar';
@@ -39,6 +39,34 @@ export function App() {
   const [isRoomSwitcherOpen, setIsRoomSwitcherOpen] = useState(false);
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  // Auto-join room from URL invite (/join/:code or ?join=:code or ?room=:code or #join/:code)
+  useEffect(() => {
+    try {
+      const pathname = window.location.pathname;
+      const match = pathname.match(/\/join\/([A-Za-z0-9]+)/i);
+      let code = match ? match[1] : null;
+
+      if (!code) {
+        const searchParams = new URLSearchParams(window.location.search);
+        code = searchParams.get('join') || searchParams.get('room');
+      }
+      if (!code && window.location.hash) {
+        const hashMatch = window.location.hash.match(/#\/?join\/([A-Za-z0-9]+)/i);
+        if (hashMatch) code = hashMatch[1];
+      }
+
+      if (code) {
+        const clean = code.toUpperCase().trim();
+        if (!store.currentRoom || store.currentRoom.invite_code.toUpperCase() !== clean) {
+          console.log('[DVide App] Detected invite code in URL:', clean);
+          store.joinRoomByCode(clean);
+        }
+      }
+    } catch (e) {
+      console.warn('URL auto-join parsing failed:', e);
+    }
+  }, []);
 
   // Expense tab filter & search
   const [expenseFilter, setExpenseFilter] = useState<string>('all');
@@ -481,6 +509,7 @@ export function App() {
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         currentUser={store.currentUser}
+        onUpdateProfileName={store.updateProfileName}
         onResetDemo={store.clearAllData}
       />
     </div>

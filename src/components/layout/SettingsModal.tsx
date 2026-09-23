@@ -15,6 +15,7 @@ interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   currentUser: UserProfile;
+  onUpdateProfileName?: (name: string) => void;
   onResetDemo: () => void;
 }
 
@@ -22,11 +23,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
   onClose,
   currentUser,
+  onUpdateProfileName,
   onResetDemo,
 }) => {
+  const [displayName, setDisplayName] = useState(currentUser.name);
   const [urlInput, setUrlInput] = useState(supabaseUrl);
   const [keyInput, setKeyInput] = useState(supabaseKey);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [nameSaved, setNameSaved] = useState(false);
+
+  const handleSaveName = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!displayName.trim() || !onUpdateProfileName) return;
+    onUpdateProfileName(displayName.trim());
+    setNameSaved(true);
+    setTimeout(() => setNameSaved(false), 2000);
+  };
 
   const handleSaveSupabase = (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,31 +60,50 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     >
       <div className="space-y-5 pb-2">
         {/* User Card */}
-        <div className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-white/[0.04] border border-white/[0.08]">
-          <div className="w-12 h-12 rounded-full overflow-hidden bg-white/10 border border-white/15 shrink-0">
-            {currentUser.avatar_url ? (
-              <img
-                src={currentUser.avatar_url}
-                alt={currentUser.name}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <span className="text-base font-semibold text-white flex items-center justify-center h-full">
-                {currentUser.name[0]}
-              </span>
-            )}
-          </div>
-          <div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-sm font-semibold text-white">{currentUser.name}</span>
-              <Badge variant="glass" size="sm">
-                Active
-              </Badge>
+        <div className="p-3.5 rounded-2xl bg-white/[0.04] border border-white/[0.08] space-y-3">
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-full overflow-hidden bg-white/10 border border-white/15 shrink-0">
+              {currentUser.avatar_url ? (
+                <img
+                  src={currentUser.avatar_url}
+                  alt={currentUser.name}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <span className="text-base font-semibold text-white flex items-center justify-center h-full">
+                  {currentUser.name[0] || 'U'}
+                </span>
+              )}
             </div>
-            <span className="text-xs text-[#8E8E93] block mt-0.5">
-              {currentUser.email || 'krish@dvide.app'}
-            </span>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm font-semibold text-white truncate">{currentUser.name}</span>
+                <Badge variant="glass" size="sm">
+                  Active
+                </Badge>
+              </div>
+              <span className="text-xs text-[#8E8E93] block mt-0.5 font-mono">
+                ID: {currentUser.id.slice(0, 10)}
+              </span>
+            </div>
           </div>
+
+          <form onSubmit={handleSaveName} className="flex gap-2 pt-1">
+            <input
+              type="text"
+              placeholder="Your display name"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              className="flex-1 h-9 px-3 rounded-xl glass-input text-xs text-white"
+            />
+            <button
+              type="submit"
+              disabled={!displayName.trim() || displayName.trim() === currentUser.name}
+              className="px-3.5 h-9 rounded-xl bg-ios-blue text-white text-xs font-semibold hover:bg-[#0071EB] disabled:opacity-30 transition-all shrink-0"
+            >
+              {nameSaved ? 'Saved! ✓' : 'Update'}
+            </button>
+          </form>
         </div>
 
         {/* Backend & Supabase Integration */}
